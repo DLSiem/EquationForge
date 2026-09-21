@@ -75,6 +75,14 @@ const MATH_SYMBOLS: Record<string, string> = {
     "\\equiv": "≡",
     "\\sim": "∼",
     "\\propto": "∝",
+    "\\ll": "≪",
+"\\gg": "≫",
+"\\prec": "≺",
+"\\succ": "≻",
+"\\preceq": "≼",
+"\\succeq": "≽",
+"\\parallel": "∥",
+"\\perp": "⊥",
 
     // Set / logic
     "\\in": "∈",
@@ -89,11 +97,23 @@ const MATH_SYMBOLS: Record<string, string> = {
     "\\forall": "∀",
     "\\exists": "∃",
     "\\neg": "¬",
+    "\\not\\subset": "⊄",
+"\\not\\subseteq": "⊈",
+"\\not\\supset": "⊅",
+"\\not\\supseteq": "⊉",
+"\\setminus": "∖",
+"\\bigcup": "⋃",
+"\\bigcap": "⋂",
 
     // Common symbols
     "\\infty": "∞",
     "\\partial": "∂",
     "\\nabla": "∇",
+    "\\ell": "ℓ",
+"\\Re": "ℜ",
+"\\Im": "ℑ",
+"\\aleph": "ℵ",
+"\\prime": "′",
 
     // Arrows
     "\\rightarrow": "→",
@@ -102,7 +122,19 @@ const MATH_SYMBOLS: Record<string, string> = {
     "\\leftrightarrow": "↔",
     "\\Rightarrow": "⇒",
     "\\Leftarrow": "⇐",
-    "\\Leftrightarrow": "⇔"
+    "\\Leftrightarrow": "⇔",
+    "\\mapsto": "↦",
+"\\hookrightarrow": "↪",
+"\\hookleftarrow": "↩",
+"\\uparrow": "↑",
+"\\downarrow": "↓",
+"\\updownarrow": "↕",
+"\\nearrow": "↗",
+"\\searrow": "↘",
+"\\swarrow": "↙",
+"\\nwarrow": "↖",
+    
+
 };
 
 const NARY_COMMANDS: Record<string, string> = {
@@ -126,7 +158,50 @@ const DELIMITER_COMMANDS = new Set([
     "\\lvert",
     "\\rvert",
     "\\Vert"
+    
 ]);
+
+const FUNCTION_COMMANDS: Record<string, string> = {
+    "\\sin": "sin",
+    "\\cos": "cos",
+    "\\tan": "tan",
+    "\\cot": "cot",
+    "\\sec": "sec",
+    "\\csc": "csc",
+
+    "\\sinh": "sinh",
+    "\\cosh": "cosh",
+    "\\tanh": "tanh",
+    "\\coth": "coth",
+
+    "\\arcsin": "sin",
+    "\\arccos": "cos",
+    "\\arctan": "tan",
+
+    "\\log": "log",
+    "\\ln": "ln",
+    "\\lg": "lg",
+    "\\exp": "exp",
+
+    "\\det": "det",
+    "\\gcd": "gcd",
+    "\\lcm": "lcm",
+
+    "\\lim": "lim",
+    "\\max": "max",
+    "\\min": "min",
+    "\\sup": "sup",
+    "\\inf": "inf"
+};
+
+const STYLE_COMMANDS: Record<
+    string,
+    "bold" | "roman" | "italic"
+> = {
+    "\\mathbf": "bold",
+    "\\mathrm": "roman",
+    "\\mathit": "italic"
+};
 
 
 function readCommand(
@@ -155,6 +230,375 @@ function readCommand(
     };
 }
 
+function parseStyle(
+    expression: string,
+    startIndex: number
+): {
+    node: MathNode;
+    nextIndex: number;
+} {
+    const command =
+        readCommand(
+            expression,
+            startIndex
+        );
+
+    if (!command) {
+        throw new Error(
+            `Invalid style command near position ${startIndex}.`
+        );
+    }
+
+    const style =
+        STYLE_COMMANDS[
+            command.command
+        ];
+
+    if (!style) {
+        throw new Error(
+            `Unsupported style command: ${command.command}`
+        );
+    }
+
+    let index =
+        command.nextIndex;
+
+    while (
+        index < expression.length &&
+        /\s/.test(
+            expression[index] ?? ""
+        )
+    ) {
+        index++;
+    }
+
+    if (
+        expression[index] !== "{"
+    ) {
+        throw new Error(
+            `${command.command} requires a grouped argument.`
+        );
+    }
+
+    const group =
+        readGroup(
+            expression,
+            index
+        );
+
+    return {
+        node: {
+            type: "style",
+            style,
+            content:
+                parseSequence(
+                    group.content
+                )
+        },
+
+        nextIndex:
+            group.nextIndex
+    };
+}
+
+function parseFunction(
+    expression: string,
+    startIndex: number
+): {
+    node: MathNode;
+    nextIndex: number;
+} {
+    const command = readCommand(
+        expression,
+        startIndex
+    );
+
+    if (!command) {
+        throw new Error(
+            `Invalid function near position ${startIndex}.`
+        );
+    }
+
+    const functionName =
+        FUNCTION_COMMANDS[command.command];
+
+    const isInverseTrig =
+    command.command === "\\arcsin" ||
+    command.command === "\\arccos" ||
+    command.command === "\\arctan";
+
+    if (!functionName) {
+        throw new Error(
+            `Unsupported function: ${command.command}`
+        );
+    }
+
+    let index = command.nextIndex;
+
+    // Ignore spaces after the function name.
+    while (
+        index < expression.length &&
+        /\s/.test(expression[index] ?? "")
+    ) {
+        index++;
+    }
+
+    /*
+     * -----------------------------------------------------
+     * FUNCTION-LEVEL SUBSCRIPT / SUPERSCRIPT
+     *
+     * \sin^2 x
+     * \sin_1 x
+     * \sin_1^2 x
+     * -----------------------------------------------------
+     */
+
+    let subscript: MathNode | null = null;
+let superscript: MathNode | null = null;
+
+if (isInverseTrig) {
+    superscript = {
+        type: "text",
+        value: "-1"
+    };
+}
+
+    while (
+        index < expression.length &&
+        (
+            expression[index] === "^" ||
+            expression[index] === "_"
+        )
+    ) {
+        const marker = expression[index];
+
+        index++;
+
+        const script =
+            readScript(
+                expression,
+                index
+            );
+
+        index =
+            script.nextIndex;
+
+        const scriptNode =
+            parseSequence(
+                script.content
+            );
+
+        if (marker === "^") {
+            if (superscript !== null) {
+                throw new Error(
+                    "A function cannot have two superscripts."
+                );
+            }
+
+            superscript =
+                scriptNode;
+        } else {
+            if (subscript !== null) {
+                throw new Error(
+                    "A function cannot have two subscripts."
+                );
+            }
+
+            subscript =
+                scriptNode;
+        }
+
+        // Allow spaces between the script and argument.
+        while (
+            index < expression.length &&
+            /\s/.test(expression[index] ?? "")
+        ) {
+            index++;
+        }
+    }
+
+    /*
+     * A function still needs an argument.
+     */
+    if (index >= expression.length) {
+        throw new Error(
+            `${command.command} requires an argument.`
+        );
+    }
+
+    let argument: MathNode;
+
+    /*
+     * -----------------------------------------------------
+     * \sin{x^2+1}
+     * -----------------------------------------------------
+     */
+    if (expression[index] === "{") {
+        const group =
+            readGroup(
+                expression,
+                index
+            );
+
+        argument =
+            parseSequence(
+                group.content
+            );
+
+        index =
+            group.nextIndex;
+    }
+
+    /*
+     * -----------------------------------------------------
+     * \sin\left(x\right)
+     * -----------------------------------------------------
+     */
+    else if (
+        expression.startsWith(
+            "\\left",
+            index
+        )
+    ) {
+        const delimiter =
+            parseDelimiter(
+                expression,
+                index
+            );
+
+        argument =
+            delimiter.node;
+
+        index =
+            delimiter.nextIndex;
+    }
+
+    /*
+     * -----------------------------------------------------
+     * \sin x
+     *
+     * Read one mathematical atom.
+     *
+     * \sin x^2
+     * means:
+     *
+     * sin(x²)
+     * -----------------------------------------------------
+     */
+    else {
+        const atom =
+            readSingleAtom(
+                expression,
+                index
+            );
+
+        argument =
+            atom.node;
+
+        index =
+            atom.nextIndex;
+
+        /*
+         * Scripts here belong to the ARGUMENT,
+         * not to the function.
+         *
+         * \sin x^2
+         *       ^
+         *       |
+         *       argument script
+         */
+
+        let argumentSubscript:
+            MathNode | null = null;
+
+        let argumentSuperscript:
+            MathNode | null = null;
+
+        while (
+            index < expression.length &&
+            (
+                expression[index] === "^" ||
+                expression[index] === "_"
+            )
+        ) {
+            const marker =
+                expression[index];
+
+            index++;
+
+            const script =
+                readScript(
+                    expression,
+                    index
+                );
+
+            index =
+                script.nextIndex;
+
+            const scriptNode =
+                parseSequence(
+                    script.content
+                );
+
+            if (marker === "^") {
+                if (
+                    argumentSuperscript !== null
+                ) {
+                    throw new Error(
+                        "An argument cannot have two superscripts."
+                    );
+                }
+
+                argumentSuperscript =
+                    scriptNode;
+            } else {
+                if (
+                    argumentSubscript !== null
+                ) {
+                    throw new Error(
+                        "An argument cannot have two subscripts."
+                    );
+                }
+
+                argumentSubscript =
+                    scriptNode;
+            }
+        }
+
+        if (
+            argumentSubscript !== null ||
+            argumentSuperscript !== null
+        ) {
+            argument = {
+                type: "script",
+                base: argument,
+                subscript:
+                    argumentSubscript,
+                superscript:
+                    argumentSuperscript
+            };
+        }
+    }
+
+    /*
+     * -----------------------------------------------------
+     * FUNCTION NODE
+     * -----------------------------------------------------
+     */
+
+    return {
+        node: {
+            type: "function",
+            name: functionName,
+            argument,
+            subscript,
+            superscript
+        },
+
+        nextIndex: index
+    };
+}
+
 function parseMatrixEnvironment(
     expression: string,
     startIndex: number
@@ -166,8 +610,8 @@ function parseMatrixEnvironment(
         expression.slice(startIndex);
 
     const beginMatch = remaining.match(
-        /^\\begin\{(matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix)\}/
-    );
+    /^\\begin\{(matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|cases)\}/
+);
 
     if (!beginMatch) {
         throw new Error(
@@ -182,7 +626,8 @@ function parseMatrixEnvironment(
             | "bmatrix"
             | "Bmatrix"
             | "vmatrix"
-            | "Vmatrix";
+            | "Vmatrix"
+            | "cases";
 
     const bodyStart =
         startIndex + beginMatch[0].length;
@@ -227,6 +672,38 @@ function parseMatrixEnvironment(
             "Matrix must contain at least one row."
         );
     }
+
+    if (environment === "cases") {
+    if (rows.length === 0) {
+        throw new Error(
+            "Cases must contain at least one row."
+        );
+    }
+
+    for (const row of rows) {
+        if (row.length !== 2) {
+            throw new Error(
+                "Each cases row must contain an expression and a condition separated by &."
+            );
+        }
+    }
+
+    const casesNode: MathNode = {
+        type: "cases",
+        rows: rows.map((row) => ({
+            expression:
+                parseSequence(row[0]),
+            condition:
+                parseSequence(row[1])
+        }))
+    };
+
+    return {
+        node: casesNode,
+        nextIndex:
+            endIndex + endToken.length
+    };
+}
 
     const columnCount =
         rows[0].length;
@@ -694,19 +1171,21 @@ function parseNary(
     }
 }
 
-function readSingleAtom(
+ function readSingleAtom(
     expression: string,
     startIndex: number
 ): {
     node: MathNode;
     nextIndex: number;
 } {
-    let index = startIndex;
+    const index = startIndex;
 
     /*
-     * Grouped atom:
+     * -----------------------------------------------------
+     * GROUPED ATOM
      *
      * {x+1}
+     * -----------------------------------------------------
      */
     if (expression[index] === "{") {
         const group =
@@ -727,10 +1206,76 @@ function readSingleAtom(
     }
 
     /*
-     * Mathematical command.
+     * -----------------------------------------------------
+     * ORDINARY PARENTHESES
      *
-     * We currently support ordinary commands that
-     * resolve to symbols, plus \frac and \sqrt.
+     * (x+a)
+     *
+     * We need to find the matching ")" and parse
+     * everything inside as one mathematical expression.
+     *
+     * This is especially important for:
+     *
+     * \sin(x+a)
+     * \cos(x^2+1)
+     * \exp(x^2+1)
+     * -----------------------------------------------------
+     */
+    if (expression[index] === "(") {
+        let depth = 1;
+        let endIndex = index + 1;
+
+        while (
+            endIndex < expression.length &&
+            depth > 0
+        ) {
+            if (expression[endIndex] === "(") {
+                depth++;
+            } else if (
+                expression[endIndex] === ")"
+            ) {
+                depth--;
+            }
+
+            endIndex++;
+        }
+
+        if (depth !== 0) {
+            throw new Error(
+                "Unmatched opening parenthesis."
+            );
+        }
+
+        const content =
+            expression.slice(
+                index + 1,
+                endIndex - 1
+            );
+
+        return {
+            node: {
+                type: "delimiter",
+                begin: "(",
+                end: ")",
+                content:
+                    parseSequence(
+                        content
+                    )
+            },
+
+            nextIndex: endIndex
+        };
+    }
+
+    /*
+     * -----------------------------------------------------
+     * MATHEMATICAL COMMAND
+     *
+     * \alpha
+     * \pi
+     * \times
+     * etc.
+     * -----------------------------------------------------
      */
     if (expression[index] === "\\") {
         const command =
@@ -756,27 +1301,37 @@ function readSingleAtom(
                     type: "text",
                     value: symbol
                 },
+
                 nextIndex:
                     command.nextIndex
             };
         }
 
         throw new Error(
-            `Unsupported command inside n-ary body: ${command.command}`
+            `Unsupported command inside function argument: ${command.command}`
         );
     }
 
     /*
-     * Ordinary text atom.
+     * -----------------------------------------------------
+     * ORDINARY TEXT ATOM
      *
-     * We consume one character here.
-     * The caller is responsible for reading
-     * a following subscript/superscript.
+     * Read one character.
+     * -----------------------------------------------------
      */
+    if (
+        index >= expression.length
+    ) {
+        throw new Error(
+            "Expected a mathematical expression."
+        );
+    }
+
     return {
         node: {
             type: "text",
-            value: expression[index]
+            value:
+                expression[index]
         },
 
         nextIndex:
@@ -856,7 +1411,12 @@ if (
     expression.startsWith(
         "\\begin{Vmatrix}",
         index
+    ) ||
+    expression.startsWith(
+        "\\begin{cases}",
+        index
     )
+
 ) {
     const matrix =
         parseMatrixEnvironment(
@@ -869,6 +1429,7 @@ if (
     index =
         matrix.nextIndex;
 }
+
 
 
 
@@ -1076,6 +1637,51 @@ if (
                 group.nextIndex;
         }
 
+        else if (
+    expression[index] === "\\" &&
+    Object.prototype.hasOwnProperty.call(
+        STYLE_COMMANDS,
+        readCommand(
+            expression,
+            index
+        )?.command ?? ""
+    )
+) {
+    const styleResult =
+        parseStyle(
+            expression,
+            index
+        );
+
+    base =
+        styleResult.node;
+
+    index =
+        styleResult.nextIndex;
+}
+
+        else if (
+    expression[index] === "\\" && Object.prototype.hasOwnProperty.call(
+        FUNCTION_COMMANDS,
+        readCommand(
+            expression,
+            index
+        )?.command ?? ""
+    )
+) {
+    const functionResult =
+        parseFunction(
+            expression,
+            index
+        );
+
+    base =
+        functionResult.node;
+
+    index =
+        functionResult.nextIndex;
+}
+
         /*
          * -----------------------------------------------------
          * MATHEMATICAL COMMAND
@@ -1088,39 +1694,164 @@ if (
          * -----------------------------------------------------
          */
         else if (
+    expression[index] === "\\"
+) {
+    const command =
+        readCommand(
+            expression,
+            index
+        );
+
+    if (!command) {
+        throw new Error(
+            `Invalid command near position ${index}.`
+        );
+    }
+
+    /*
+     * \not is a modifier.
+     *
+     * Example:
+     *
+     * \not=      → ≠
+     * \not\in   → ∉
+     * \not<     → ≮
+     */
+    if (command.command === "\\not") {
+        index =
+            command.nextIndex;
+
+        while (
+            index < expression.length &&
+            /\s/.test(
+                expression[index] ?? ""
+            )
+        ) {
+            index++;
+        }
+
+        if (
+            index >= expression.length
+        ) {
+            throw new Error(
+                "\\not requires a symbol or relation."
+            );
+        }
+
+        /*
+         * Read the symbol after \not.
+         */
+        let nextCommand:
+            {
+                command: string;
+                nextIndex: number;
+            } | null = null;
+
+        if (
             expression[index] === "\\"
         ) {
-            const command =
+            nextCommand =
                 readCommand(
                     expression,
                     index
                 );
+        }
 
-            if (!command) {
-                throw new Error(
-                    `Invalid command near position ${index}.`
-                );
-            }
+        /*
+         * Named commands such as:
+         *
+         * \not\in
+         * \not\subset
+         */
+        if (nextCommand) {
+            const negatedSymbols:
+                Record<string, string> = {
+                "\\in": "∉",
+                "\\subset": "⊄",
+                "\\subseteq": "⊈",
+                "\\supset": "⊅",
+                "\\supseteq": "⊉"
+            };
 
-            const symbol =
-                MATH_SYMBOLS[
-                    command.command
+            const negated =
+                negatedSymbols[
+                    nextCommand.command
                 ];
 
-            if (!symbol) {
+            if (!negated) {
                 throw new Error(
-                    `Unsupported command: ${command.command}`
+                    `Cannot negate command: ${nextCommand.command}`
                 );
             }
 
             base = {
                 type: "text",
-                value: symbol
+                value: negated
             };
 
             index =
-                command.nextIndex;
+                nextCommand.nextIndex;
         }
+
+        /*
+         * Single-character relations:
+         *
+         * \not=
+         * \not<
+         * \not>
+         */
+        else {
+            const character =
+                expression[index];
+
+            const negatedCharacters:
+                Record<string, string> = {
+                "=": "≠",
+                "<": "≮",
+                ">": "≯"
+            };
+
+            const negated =
+                negatedCharacters[
+                    character
+                ];
+
+            if (!negated) {
+                throw new Error(
+                    `Cannot negate symbol: ${character}`
+                );
+            }
+
+            base = {
+                type: "text",
+                value: negated
+            };
+
+            index++;
+        }
+    }
+
+    else {
+        const symbol =
+            MATH_SYMBOLS[
+                command.command
+            ];
+
+        if (!symbol) {
+            throw new Error(
+                `Unsupported command: ${command.command}`
+            );
+        }
+
+        base = {
+            type: "text",
+            value: symbol
+        };
+
+        index =
+            command.nextIndex;
+    }
+}
 
         /*
          * -----------------------------------------------------
@@ -1168,80 +1899,82 @@ if (
          * \left(x+1\right)^2
          * -----------------------------------------------------
          */
+        /*
+ * -----------------------------------------------------
+ * OPTIONAL SUBSCRIPT / SUPERSCRIPT
+ *
+ * Functions handle their own scripts inside
+ * parseFunction().
+ *
+ * Therefore the generic script parser must NOT
+ * process FunctionNode again.
+ * -----------------------------------------------------
+ */
 
-        let subscript: MathNode | null =
-            null;
+if (base.type === "function") {
+    children.push(base);
+    continue;
+}
 
-        let superscript: MathNode | null =
-            null;
+let subscript: MathNode | null = null;
+let superscript: MathNode | null = null;
 
-        while (
-            index < expression.length &&
-            (
-                expression[index] === "^" ||
-                expression[index] === "_"
-            )
-        ) {
-            const marker =
-                expression[index];
+while (
+    index < expression.length &&
+    (
+        expression[index] === "^" ||
+        expression[index] === "_"
+    )
+) {
+    const marker = expression[index];
 
-            index++;
+    index++;
 
-            const script =
-                readScript(
-                    expression,
-                    index
-                );
+    const script = readScript(
+        expression,
+        index
+    );
 
-            index =
-                script.nextIndex;
+    index = script.nextIndex;
 
-            const scriptNode =
-                parseSequence(
-                    script.content
-                );
+    const scriptNode = parseSequence(
+        script.content
+    );
 
-            if (marker === "^") {
-                if (superscript !== null) {
-                    throw new Error(
-                        "An element cannot have two superscripts."
-                    );
-                }
-
-                superscript =
-                    scriptNode;
-            } else {
-                if (subscript !== null) {
-                    throw new Error(
-                        "An element cannot have two subscripts."
-                    );
-                }
-
-                subscript =
-                    scriptNode;
-            }
+    if (marker === "^") {
+        if (superscript !== null) {
+            throw new Error(
+                "An element cannot have two superscripts."
+            );
         }
 
-        /*
-         * No scripts.
-         */
-        if (
-            subscript === null &&
-            superscript === null
-        ) {
-            children.push(base);
-            continue;
+        superscript = scriptNode;
+    } else {
+        if (subscript !== null) {
+            throw new Error(
+                "An element cannot have two subscripts."
+            );
         }
 
-        /*
-         * Scripted base.
-         */
-        children.push({
-            type: "script",
-            base,
-            subscript,
-            superscript
-        });
+        subscript = scriptNode;
+    }
+}
+
+if (
+    subscript === null &&
+    superscript === null
+) {
+    children.push(base);
+    continue;
+}
+
+children.push({
+    type: "script",
+    base,
+    subscript,
+    superscript
+});
+         
     }
 
     return {

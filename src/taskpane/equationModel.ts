@@ -14,7 +14,34 @@ export type MathNode =
     | ScriptNode
     | NaryNode
     | DelimiterNode
-    | MatrixNode;
+    | MatrixNode
+    | FunctionNode
+    | CasesNode
+    | StyleNode;
+
+
+export interface StyleNode {
+    type: "style";
+    style: "bold" | "roman" | "italic";
+    content: MathNode;
+}
+
+export interface CasesNode {
+    type: "cases";
+    rows: Array<{
+        expression: MathNode;
+        condition: MathNode;
+    }>;
+}
+
+export interface FunctionNode {
+    type: "function";
+    name: string;
+    argument: MathNode;
+    subscript: MathNode | null;
+    superscript: MathNode | null;
+}
+
 
 export interface TextNode {
     type: "text";
