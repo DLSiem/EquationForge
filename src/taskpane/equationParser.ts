@@ -104,6 +104,16 @@ export const MATH_SYMBOLS: Record<string, string> = {
     "\\Leftarrow": "⇐",
     "\\Leftrightarrow": "⇔"
 };
+
+const NARY_COMMANDS: Record<string, string> = {
+    "\\int": "∫",
+    "\\oint": "∮",
+    "\\sum": "∑",
+    "\\prod": "∏",
+    "\\bigcup": "⋃",
+    "\\bigcap": "⋂"
+};
+
 export function canParseWithNewEngine(
     expression: string
 ): boolean {
@@ -118,7 +128,9 @@ export function canParseWithNewEngine(
     const supportedCommands = new Set([
         "\\frac",
         "\\sqrt",
-        ...Object.keys(MATH_SYMBOLS)
+        ...Object.keys(MATH_SYMBOLS),
+        ...Object.keys(NARY_COMMANDS)
+
     ]);
 
     return commands.every(
@@ -150,6 +162,317 @@ function readCommand(
         command: match[0],
         nextIndex:
             startIndex + match[0].length
+    };
+}
+
+function parseNary(
+    expression: string,
+    startIndex: number
+): {
+    node: MathNode;
+    nextIndex: number;
+} {
+    const command =
+        readCommand(
+            expression,
+            startIndex
+        );
+
+    if (!command) {
+        throw new Error(
+            "Invalid n-ary command."
+        );
+    }
+
+    const operator =
+        NARY_COMMANDS[command.command];
+
+    if (!operator) {
+        throw new Error(
+            `Unsupported n-ary command: ${command.command}`
+        );
+    }
+
+    let index =
+        command.nextIndex;
+
+    /*
+     * ---------------------------------------------------------
+     * Optional lower/upper limits
+     *
+     * \sum_{i=1}^{n}
+     * \int_0^1
+     * ---------------------------------------------------------
+     */
+
+    let lower: MathNode | null = null;
+    let upper: MathNode | null = null;
+
+    skipWhitespace();
+
+    while (
+        index < expression.length &&
+        (
+            expression[index] === "_" ||
+            expression[index] === "^"
+        )
+    ) {
+        const marker =
+            expression[index];
+
+        index++;
+
+        const script =
+            readScript(
+                expression,
+                index
+            );
+
+        index =
+            script.nextIndex;
+
+        const scriptNode =
+            parseSequence(
+                script.content
+            );
+
+        if (marker === "_") {
+            if (lower !== null) {
+                throw new Error(
+                    "An n-ary operator cannot have two lower limits."
+                );
+            }
+
+            lower = scriptNode;
+        } else {
+            if (upper !== null) {
+                throw new Error(
+                    "An n-ary operator cannot have two upper limits."
+                );
+            }
+
+            upper = scriptNode;
+        }
+
+        skipWhitespace();
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * Read the body.
+     *
+     * At this stage we support either:
+     *
+     * \sum_{i=1}^{n} i^2
+     *
+     * or:
+     *
+     * \sum_{i=1}^{n} {i^2 + 1}
+     *
+     * Grouping lets us explicitly define a multi-token body.
+     * ---------------------------------------------------------
+     */
+
+    if (index >= expression.length) {
+        throw new Error(
+            `${command.command} is missing its body.`
+        );
+    }
+
+    let body: MathNode;
+
+    if (expression[index] === "{") {
+        const group =
+            readGroup(
+                expression,
+                index
+            );
+
+        body =
+            parseSequence(
+                group.content
+            );
+
+        index =
+            group.nextIndex;
+    } else {
+        const bodyAtom =
+            readSingleAtom(
+                expression,
+                index
+            );
+
+        body =
+            bodyAtom.node;
+
+        index =
+            bodyAtom.nextIndex;
+
+        /*
+         * Allow a script directly on the body:
+         *
+         * \sum_{i=1}^{n} a_i
+         */
+        let subscript: MathNode | null = null;
+        let superscript: MathNode | null = null;
+
+        while (
+            index < expression.length &&
+            (
+                expression[index] === "_" ||
+                expression[index] === "^"
+            )
+        ) {
+            const marker =
+                expression[index];
+
+            index++;
+
+            const script =
+                readScript(
+                    expression,
+                    index
+                );
+
+            index =
+                script.nextIndex;
+
+            const scriptNode =
+                parseSequence(
+                    script.content
+                );
+
+            if (marker === "_") {
+                subscript =
+                    scriptNode;
+            } else {
+                superscript =
+                    scriptNode;
+            }
+        }
+
+        if (
+            subscript !== null ||
+            superscript !== null
+        ) {
+            body = {
+                type: "script",
+                base: body,
+                subscript,
+                superscript
+            };
+        }
+    }
+
+    return {
+        node: {
+            type: "nary",
+            operator,
+            lower,
+            upper,
+            body
+        },
+
+        nextIndex: index
+    };
+
+    function skipWhitespace(): void {
+        while (
+            index < expression.length &&
+            /\s/.test(expression[index])
+        ) {
+            index++;
+        }
+    }
+}
+
+function readSingleAtom(
+    expression: string,
+    startIndex: number
+): {
+    node: MathNode;
+    nextIndex: number;
+} {
+    let index = startIndex;
+
+    /*
+     * Grouped atom:
+     *
+     * {x+1}
+     */
+    if (expression[index] === "{") {
+        const group =
+            readGroup(
+                expression,
+                index
+            );
+
+        return {
+            node:
+                parseSequence(
+                    group.content
+                ),
+
+            nextIndex:
+                group.nextIndex
+        };
+    }
+
+    /*
+     * Mathematical command.
+     *
+     * We currently support ordinary commands that
+     * resolve to symbols, plus \frac and \sqrt.
+     */
+    if (expression[index] === "\\") {
+        const command =
+            readCommand(
+                expression,
+                index
+            );
+
+        if (!command) {
+            throw new Error(
+                `Invalid command near position ${index}.`
+            );
+        }
+
+        const symbol =
+            MATH_SYMBOLS[
+                command.command
+            ];
+
+        if (symbol) {
+            return {
+                node: {
+                    type: "text",
+                    value: symbol
+                },
+                nextIndex:
+                    command.nextIndex
+            };
+        }
+
+        throw new Error(
+            `Unsupported command inside n-ary body: ${command.command}`
+        );
+    }
+
+    /*
+     * Ordinary text atom.
+     *
+     * We consume one character here.
+     * The caller is responsible for reading
+     * a following subscript/superscript.
+     */
+    return {
+        node: {
+            type: "text",
+            value: expression[index]
+        },
+
+        nextIndex:
+            index + 1
     };
 }
 
@@ -200,6 +523,40 @@ function parseSequence(
         }
 
         let base: MathNode;
+
+        /*
+ * ---------------------------------------------------------
+ * N-ARY OPERATORS
+ *
+ * \int
+ * \oint
+ * \sum
+ * \prod
+ * ---------------------------------------------------------
+ */
+if (
+    expression.startsWith("\\int", index) ||
+    expression.startsWith("\\oint", index) ||
+    expression.startsWith("\\sum", index) ||
+    expression.startsWith("\\prod", index) ||
+    expression.startsWith("\\bigcup", index) ||
+    expression.startsWith("\\bigcap", index)
+) {
+    const nary =
+        parseNary(
+            expression,
+            index
+        );
+
+    children.push(
+        nary.node
+    );
+
+    index =
+        nary.nextIndex;
+
+    continue;
+}
 
                 /*
          * -----------------------------------------------------
