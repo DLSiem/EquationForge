@@ -318,10 +318,15 @@ if (canUseNewParser) {
 
             statusMessage.textContent = "Equation inserted.";
         } catch (error) {
-            console.error(error);
+    console.error("Equation insertion failed:", error);
 
-            statusMessage.textContent =
-                "Could not insert the equation.";
-        }
+    const message =
+        error instanceof Error
+            ? error.message
+            : String(error);
+
+    statusMessage.textContent =
+        `Insert failed: ${message}`;
+}
     }
 }

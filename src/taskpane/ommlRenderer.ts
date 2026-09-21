@@ -276,28 +276,55 @@ export class OmmlRenderer {
     }
 
     private renderDelimiter(
-        node: DelimiterNode
-    ): string {
-        return `
-            <m:d>
-                <m:dPr>
-                    <m:begChr
-                        m:val="${escapeXml(node.begin)}"/>
+    node: DelimiterNode
+): string {
+    const font =
+        escapeXml(this.options.fontName);
 
-                    <m:endChr
-                        m:val="${escapeXml(node.end)}"/>
+    const size = Math.round(
+        this.options.fontSize * 2
+    );
 
-                    <m:grow m:val="1"/>
-                </m:dPr>
+    return `
+        <m:d>
+            <m:dPr>
 
-                <m:e>
-                    ${this.render(
-                        node.content
-                    )}
-                </m:e>
-            </m:d>
-        `;
-    }
+                <m:begChr
+                    m:val="${escapeXml(
+                        node.begin
+                    )}"/>
+
+                <m:ctrlPr>
+                    <w:rPr>
+                        <w:rFonts
+                            w:ascii="${font}"
+                            w:hAnsi="${font}"
+                            w:eastAsia="${font}"
+                            w:cs="${font}"/>
+
+                        <w:sz w:val="${size}"/>
+                        <w:szCs w:val="${size}"/>
+                    </w:rPr>
+                </m:ctrlPr>
+
+                <m:endChr
+                    m:val="${escapeXml(
+                        node.end
+                    )}"/>
+
+                <m:grow m:val="1"/>
+
+            </m:dPr>
+
+            <m:e>
+                ${this.render(
+                    node.content
+                )}
+            </m:e>
+
+        </m:d>
+    `;
+}
 
     private renderMatrix(
         node: MatrixNode

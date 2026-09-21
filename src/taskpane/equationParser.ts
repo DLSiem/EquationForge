@@ -114,6 +114,20 @@ const NARY_COMMANDS: Record<string, string> = {
     "\\bigcap": "⋂"
 };
 
+const DELIMITER_COMMANDS = new Set([
+    "\\left",
+    "\\right",
+    "\\langle",
+    "\\rangle",
+    "\\lceil",
+    "\\rceil",
+    "\\lfloor",
+    "\\rfloor",
+    "\\lvert",
+    "\\rvert",
+    "\\Vert"
+]);
+
 export function canParseWithNewEngine(
     expression: string
 ): boolean {
@@ -129,7 +143,8 @@ export function canParseWithNewEngine(
         "\\frac",
         "\\sqrt",
         ...Object.keys(MATH_SYMBOLS),
-        ...Object.keys(NARY_COMMANDS)
+        ...Object.keys(NARY_COMMANDS),
+        ...DELIMITER_COMMANDS
 
     ]);
 
@@ -163,6 +178,217 @@ function readCommand(
         nextIndex:
             startIndex + match[0].length
     };
+}
+
+function readDelimiterToken(
+    expression: string,
+    startIndex: number
+): {
+    token: string;
+    nextIndex: number;
+} {
+    const remaining =
+        expression.slice(startIndex);
+
+    const namedDelimiters: Array<{
+        input: string;
+        output: string;
+    }> = [
+        { input: "\\langle", output: "⟨" },
+        { input: "\\rangle", output: "⟩" },
+        { input: "\\lceil", output: "⌈" },
+        { input: "\\rceil", output: "⌉" },
+        { input: "\\lfloor", output: "⌊" },
+        { input: "\\rfloor", output: "⌋" },
+        { input: "\\lvert", output: "|" },
+        { input: "\\rvert", output: "|" },
+        { input: "\\Vert", output: "‖" }
+    ];
+
+    for (const delimiter of namedDelimiters) {
+        if (remaining.startsWith(delimiter.input)) {
+            return {
+                token: delimiter.output,
+                nextIndex:
+                    startIndex +
+                    delimiter.input.length
+            };
+        }
+    }
+
+    /*
+     * Escaped brace delimiters:
+     *
+     * \left\{
+     * \right\}
+     */
+    if (remaining.startsWith("\\{")) {
+        return {
+            token: "{",
+            nextIndex: startIndex + 2
+        };
+    }
+
+    if (remaining.startsWith("\\}")) {
+        return {
+            token: "}",
+            nextIndex: startIndex + 2
+        };
+    }
+
+    /*
+     * Escaped vertical bar:
+     *
+     * \left\|
+     */
+    if (remaining.startsWith("\\|")) {
+        return {
+            token: "|",
+            nextIndex: startIndex + 2
+        };
+    }
+
+    const character =
+        expression[startIndex];
+
+    const simpleDelimiters:
+        Record<string, string> = {
+        "(": "(",
+        ")": ")",
+        "[": "[",
+        "]": "]",
+        "|": "|",
+        "<": "⟨",
+        ">": "⟩",
+        ".": ""
+    };
+
+    if (
+        Object.prototype.hasOwnProperty.call(
+            simpleDelimiters,
+            character
+        )
+    ) {
+        return {
+            token:
+                simpleDelimiters[character],
+            nextIndex:
+                startIndex + 1
+        };
+    }
+
+    throw new Error(
+        `Unsupported delimiter near position ${startIndex}.`
+    );
+}
+
+function parseDelimiter(
+    expression: string,
+    startIndex: number
+): {
+    node: MathNode;
+    nextIndex: number;
+} {
+    let index =
+        startIndex + "\\left".length;
+
+    while (
+        index < expression.length &&
+        /\s/.test(expression[index])
+    ) {
+        index++;
+    }
+
+    const begin =
+        readDelimiterToken(
+            expression,
+            index
+        );
+
+    index =
+        begin.nextIndex;
+
+    const contentStart =
+        index;
+
+    let depth = 1;
+
+    while (index < expression.length) {
+        /*
+         * Nested \left...\right
+         */
+        if (
+            expression.startsWith(
+                "\\left",
+                index
+            )
+        ) {
+            depth++;
+            index += "\\left".length;
+            continue;
+        }
+
+        if (
+            expression.startsWith(
+                "\\right",
+                index
+            )
+        ) {
+            depth--;
+
+            if (depth === 0) {
+                const content =
+                    expression.slice(
+                        contentStart,
+                        index
+                    );
+
+                index +=
+                    "\\right".length;
+
+                while (
+                    index < expression.length &&
+                    /\s/.test(
+                        expression[index]
+                    )
+                ) {
+                    index++;
+                }
+
+                const end =
+                    readDelimiterToken(
+                        expression,
+                        index
+                    );
+
+                return {
+                    node: {
+                        type: "delimiter",
+                        begin: begin.token,
+                        end: end.token,
+                        content:
+                            parseSequence(
+                                content
+                            )
+                    },
+
+                    nextIndex:
+                        end.nextIndex
+                };
+            }
+
+            index +=
+                "\\right".length;
+
+            continue;
+        }
+
+        index++;
+    }
+
+    throw new Error(
+        "Missing matching \\right delimiter."
+    );
 }
 
 function parseNary(
@@ -513,71 +739,82 @@ function parseSequence(
     let index = 0;
 
     while (index < expression.length) {
-        const character = expression[index];
-
-        /*
-         * A closing brace means the current group has ended.
-         */
-        if (character === "}") {
+        if (expression[index] === "}") {
             break;
         }
 
         let base: MathNode;
 
         /*
- * ---------------------------------------------------------
- * N-ARY OPERATORS
- *
- * \int
- * \oint
- * \sum
- * \prod
- * ---------------------------------------------------------
- */
-if (
-    expression.startsWith("\\int", index) ||
-    expression.startsWith("\\oint", index) ||
-    expression.startsWith("\\sum", index) ||
-    expression.startsWith("\\prod", index) ||
-    expression.startsWith("\\bigcup", index) ||
-    expression.startsWith("\\bigcap", index)
-) {
-    const nary =
-        parseNary(
-            expression,
-            index
-        );
+         * -----------------------------------------------------
+         * DYNAMIC DELIMITER
+         * -----------------------------------------------------
+         */
+        if (
+            expression.startsWith(
+                "\\left",
+                index
+            )
+        ) {
+            const delimiter =
+                parseDelimiter(
+                    expression,
+                    index
+                );
 
-    children.push(
-        nary.node
-    );
+            base = delimiter.node;
 
-    index =
-        nary.nextIndex;
+            index =
+                delimiter.nextIndex;
+        }
 
-    continue;
-}
+        /*
+         * -----------------------------------------------------
+         * N-ARY OPERATOR
+         * -----------------------------------------------------
+         */
+        else if (
+            expression.startsWith("\\int", index) ||
+            expression.startsWith("\\oint", index) ||
+            expression.startsWith("\\sum", index) ||
+            expression.startsWith("\\prod", index) ||
+            expression.startsWith("\\bigcup", index) ||
+            expression.startsWith("\\bigcap", index)
+        ) {
+            const nary =
+                parseNary(
+                    expression,
+                    index
+                );
 
-                /*
+            base = nary.node;
+
+            index =
+                nary.nextIndex;
+        }
+
+        /*
          * -----------------------------------------------------
          * RADICAL
          *
          * \sqrt{x}
-         * \sqrt[n]{x}
+         * \sqrt[3]{x}
          * -----------------------------------------------------
          */
-        if (expression.startsWith("\\sqrt", index)) {
-            index += "\\sqrt".length;
+        else if (
+            expression.startsWith(
+                "\\sqrt",
+                index
+            )
+        ) {
+            index +=
+                "\\sqrt".length;
 
             skipWhitespace();
 
-            let degree: MathNode | null = null;
+            let degree: MathNode | null =
+                null;
 
-            /*
-             * Optional root degree:
-             *
-             * \sqrt[3]{x}
-             */
             if (expression[index] === "[") {
                 const degreeGroup =
                     readSquareBracketGroup(
@@ -585,9 +822,10 @@ if (
                         index
                     );
 
-                degree = parseSequence(
-                    degreeGroup.content
-                );
+                degree =
+                    parseSequence(
+                        degreeGroup.content
+                    );
 
                 index =
                     degreeGroup.nextIndex;
@@ -595,10 +833,6 @@ if (
                 skipWhitespace();
             }
 
-            /*
-             * The radicand must be enclosed
-             * in { }.
-             */
             if (expression[index] !== "{") {
                 throw new Error(
                     "\\sqrt requires an expression in { }."
@@ -616,24 +850,29 @@ if (
 
             base = {
                 type: "radical",
-
                 degree,
-
-                radicand: parseSequence(
-                    radicandGroup.content
-                )
+                radicand:
+                    parseSequence(
+                        radicandGroup.content
+                    )
             };
-        } else
+        }
 
         /*
          * -----------------------------------------------------
          * FRACTION
          *
-         * \frac{numerator}{denominator}
+         * \frac{a}{b}
          * -----------------------------------------------------
          */
-        if (expression.startsWith("\\frac", index)) {
-            index += "\\frac".length;
+        else if (
+            expression.startsWith(
+                "\\frac",
+                index
+            )
+        ) {
+            index +=
+                "\\frac".length;
 
             skipWhitespace();
 
@@ -672,14 +911,17 @@ if (
             base = {
                 type: "fraction",
 
-                numerator: parseSequence(
-                    numeratorGroup.content
-                ),
+                numerator:
+                    parseSequence(
+                        numeratorGroup.content
+                    ),
 
-                denominator: parseSequence(
-                    denominatorGroup.content
-                )
+                denominator:
+                    parseSequence(
+                        denominatorGroup.content
+                    )
             };
+        }
 
         /*
          * -----------------------------------------------------
@@ -688,35 +930,45 @@ if (
          * {x+1}
          * -----------------------------------------------------
          */
-        } else if (character === "{") {
+        else if (
+            expression[index] === "{"
+        ) {
             const group =
                 readGroup(
                     expression,
                     index
                 );
 
-            base = parseSequence(
-                group.content
-            );
+            base =
+                parseSequence(
+                    group.content
+                );
 
-            index = group.nextIndex;
+            index =
+                group.nextIndex;
+        }
 
         /*
          * -----------------------------------------------------
-         * UNSUPPORTED COMMAND
+         * MATHEMATICAL COMMAND
          *
-         * Any backslash command other than \frac is rejected.
-         * The old engine will handle those commands temporarily.
+         * \alpha
+         * \beta
+         * \pi
+         * \times
+         * etc.
          * -----------------------------------------------------
          */
-        }   else if (character === "\\") {
-            const commandToken =
+        else if (
+            expression[index] === "\\"
+        ) {
+            const command =
                 readCommand(
                     expression,
                     index
                 );
 
-            if (!commandToken) {
+            if (!command) {
                 throw new Error(
                     `Invalid command near position ${index}.`
                 );
@@ -724,12 +976,12 @@ if (
 
             const symbol =
                 MATH_SYMBOLS[
-                    commandToken.command
+                    command.command
                 ];
 
             if (!symbol) {
                 throw new Error(
-                    `Unsupported command: ${commandToken.command}`
+                    `Unsupported command: ${command.command}`
                 );
             }
 
@@ -739,14 +991,15 @@ if (
             };
 
             index =
-                commandToken.nextIndex;
+                command.nextIndex;
+        }
 
         /*
          * -----------------------------------------------------
          * ORDINARY TEXT
          * -----------------------------------------------------
          */
-        } else {
+        else {
             const start = index;
 
             while (
@@ -766,33 +1019,33 @@ if (
                 );
             }
 
-            const text: TextNode = {
+            base = {
                 type: "text",
                 value: expression.slice(
                     start,
                     index
                 )
             };
-
-            base = text;
         }
 
         /*
          * -----------------------------------------------------
-         * SCRIPTS
+         * OPTIONAL SUBSCRIPT / SUPERSCRIPT
+         *
+         * This applies to ANY base:
          *
          * x^2
-         * x_1
-         * x_1^2
-         *
-         * Importantly, scripts can now attach to a fraction too:
-         *
          * \frac{a}{b}^2
+         * \sqrt{x}_1
+         * \left(x+1\right)^2
          * -----------------------------------------------------
          */
 
-        let subscript: MathNode | null = null;
-        let superscript: MathNode | null = null;
+        let subscript: MathNode | null =
+            null;
+
+        let superscript: MathNode | null =
+            null;
 
         while (
             index < expression.length &&
@@ -801,7 +1054,7 @@ if (
                 expression[index] === "_"
             )
         ) {
-            const operator =
+            const marker =
                 expression[index];
 
             index++;
@@ -820,7 +1073,7 @@ if (
                     script.content
                 );
 
-            if (operator === "^") {
+            if (marker === "^") {
                 if (superscript !== null) {
                     throw new Error(
                         "An element cannot have two superscripts."
@@ -853,7 +1106,7 @@ if (
         }
 
         /*
-         * Create one ScriptNode around the base.
+         * Scripted base.
          */
         children.push({
             type: "script",
@@ -868,19 +1121,17 @@ if (
         children
     };
 
-    /*
-     * Skip whitespace after commands such as \frac.
-     */
     function skipWhitespace(): void {
         while (
             index < expression.length &&
-            /\s/.test(expression[index])
+            /\s/.test(
+                expression[index]
+            )
         ) {
             index++;
         }
     }
 }
-
 /**
  * Reads a balanced {...} group.
  */
