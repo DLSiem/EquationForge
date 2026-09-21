@@ -327,19 +327,31 @@ export class OmmlRenderer {
 }
 
     private renderMatrix(
-        node: MatrixNode
-    ): string {
-        const rows = node.rows
+    node: MatrixNode
+): string {
+    const font =
+        escapeXml(
+            this.options.fontName
+        );
+
+    const size =
+        Math.round(
+            this.options.fontSize * 2
+        );
+
+    const rows =
+        node.rows
             .map((row) => {
-                const cells = row
-                    .map(
-                        (cell) => `
-                            <m:e>
-                                ${this.render(cell)}
-                            </m:e>
-                        `
-                    )
-                    .join("");
+                const cells =
+                    row
+                        .map(
+                            (cell) => `
+                                <m:e>
+                                    ${this.render(cell)}
+                                </m:e>
+                            `
+                        )
+                        .join("");
 
                 return `
                     <m:mr>
@@ -349,12 +361,109 @@ export class OmmlRenderer {
             })
             .join("");
 
-        return `
-            <m:m>
-                ${rows}
-            </m:m>
-        `;
+    const matrixXml = `
+        <m:m>
+            <m:mPr>
+                <m:ctrlPr>
+                    <w:rPr>
+                        <w:rFonts
+                            w:ascii="${font}"
+                            w:hAnsi="${font}"
+                            w:eastAsia="${font}"
+                            w:cs="${font}"/>
+
+                        <w:sz w:val="${size}"/>
+                        <w:szCs w:val="${size}"/>
+                    </w:rPr>
+                </m:ctrlPr>
+            </m:mPr>
+
+            ${rows}
+        </m:m>
+    `;
+
+    const delimiters:
+        Record<
+            string,
+            {
+                begin: string;
+                end: string;
+            } | null
+        > = {
+            matrix: null,
+
+            pmatrix: {
+                begin: "(",
+                end: ")"
+            },
+
+            bmatrix: {
+                begin: "[",
+                end: "]"
+            },
+
+            Bmatrix: {
+                begin: "{",
+                end: "}"
+            },
+
+            vmatrix: {
+                begin: "|",
+                end: "|"
+            },
+
+            Vmatrix: {
+                begin: "‖",
+                end: "‖"
+            }
+        };
+
+    const delimiter =
+        delimiters[
+            node.environment
+        ];
+
+    if (!delimiter) {
+        return matrixXml;
     }
+
+    return `
+        <m:d>
+            <m:dPr>
+
+                <m:begChr
+                    m:val="${escapeXml(
+                        delimiter.begin
+                    )}"/>
+
+                <m:ctrlPr>
+                    <w:rPr>
+                        <w:rFonts
+                            w:ascii="${font}"
+                            w:hAnsi="${font}"
+                            w:eastAsia="${font}"
+                            w:cs="${font}"/>
+
+                        <w:sz w:val="${size}"/>
+                        <w:szCs w:val="${size}"/>
+                    </w:rPr>
+                </m:ctrlPr>
+
+                <m:endChr
+                    m:val="${escapeXml(
+                        delimiter.end
+                    )}"/>
+
+                <m:grow m:val="1"/>
+
+            </m:dPr>
+
+            <m:e>
+                ${matrixXml}
+            </m:e>
+        </m:d>
+    `;
+}
 
     public renderDocumentOoxml(
     node: MathNode

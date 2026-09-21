@@ -1,10 +1,5 @@
 /* global Office, Word, document */
-
-import { buildEquationOoxml } from "./equationEngine";
-import {
-    parseEquation,
-    canParseWithNewEngine
-} from "./equationParser";
+import { parseEquation } from "./equationParser";
 import { OmmlRenderer } from "./ommlRenderer";
 
 Office.onReady((info) => {
@@ -260,48 +255,24 @@ function insertAtCursor(text: string): void {
         statusMessage.textContent = "Inserting...";
 
         try {
-            let ooxml: string;
+            
 
-            const canUseNewParser = canParseWithNewEngine(equation);
+            const equationTree =
+    parseEquation(equation);
 
-if (canUseNewParser) {
-    /*
-     * Use the new equation model for:
-     *
-     * - ordinary expressions
-     * - superscripts
-     * - subscripts
-     * - fractions
-     */
-    const equationTree =
-        parseEquation(equation);
+const renderer =
+    new OmmlRenderer({
+        fontName: fontSelect.value,
+        fontSize: Number(
+            fontSize.value
+        )
+    });
 
-    const renderer =
-        new OmmlRenderer({
-            fontName: fontSelect.value,
-            fontSize: Number(
-                fontSize.value
-            )
-        });
-
-    ooxml =
-        renderer.renderDocumentOoxml(
-            equationTree
-        );
-} else {
-    /*
-     * Temporary compatibility path.
-     *
-     * Commands that have not yet been migrated
-     * to the new engine continue using the old
-     * working engine.
-     */
-    ooxml = buildEquationOoxml(
-        equation,
-        fontSelect.value,
-        Number(fontSize.value)
+const ooxml = renderer.renderDocumentOoxml(
+        equationTree
     );
-}
+
+ 
 
 
 

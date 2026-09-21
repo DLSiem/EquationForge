@@ -4,7 +4,7 @@ import type {
     TextNode
 } from "./equationModel";
 
-export const MATH_SYMBOLS: Record<string, string> = {
+const MATH_SYMBOLS: Record<string, string> = {
     // Lowercase Greek
     "\\alpha": "α",
     "\\beta": "β",
@@ -128,31 +128,6 @@ const DELIMITER_COMMANDS = new Set([
     "\\Vert"
 ]);
 
-export function canParseWithNewEngine(
-    expression: string
-): boolean {
-    const commands = expression.match(
-        /\\[A-Za-z]+/g
-    );
-
-    if (!commands) {
-        return true;
-    }
-
-    const supportedCommands = new Set([
-        "\\frac",
-        "\\sqrt",
-        ...Object.keys(MATH_SYMBOLS),
-        ...Object.keys(NARY_COMMANDS),
-        ...DELIMITER_COMMANDS
-
-    ]);
-
-    return commands.every(
-        (command) =>
-            supportedCommands.has(command)
-    );
-}
 
 function readCommand(
     expression: string,
@@ -177,6 +152,113 @@ function readCommand(
         command: match[0],
         nextIndex:
             startIndex + match[0].length
+    };
+}
+
+function parseMatrixEnvironment(
+    expression: string,
+    startIndex: number
+): {
+    node: MathNode;
+    nextIndex: number;
+} {
+    const remaining =
+        expression.slice(startIndex);
+
+    const beginMatch = remaining.match(
+        /^\\begin\{(matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix)\}/
+    );
+
+    if (!beginMatch) {
+        throw new Error(
+            `Invalid matrix environment near position ${startIndex}.`
+        );
+    }
+
+    const environment =
+        beginMatch[1] as
+            | "matrix"
+            | "pmatrix"
+            | "bmatrix"
+            | "Bmatrix"
+            | "vmatrix"
+            | "Vmatrix";
+
+    const bodyStart =
+        startIndex + beginMatch[0].length;
+
+    const endToken =
+        `\\end{${environment}}`;
+
+    const endIndex =
+        expression.indexOf(
+            endToken,
+            bodyStart
+        );
+
+    if (endIndex === -1) {
+        throw new Error(
+            `Missing ${endToken}.`
+        );
+    }
+
+    const body =
+        expression.slice(
+            bodyStart,
+            endIndex
+        );
+
+    /*
+     * Matrix syntax:
+     *
+     * &  = next column
+     * \\ = next row
+     */
+    const rows = body
+        .split(/\\\\/)
+        .map((row) =>
+            row
+                .split("&")
+                .map((cell) => cell.trim())
+        );
+
+    if (rows.length === 0) {
+        throw new Error(
+            "Matrix must contain at least one row."
+        );
+    }
+
+    const columnCount =
+        rows[0].length;
+
+    if (columnCount === 0) {
+        throw new Error(
+            "Matrix must contain at least one column."
+        );
+    }
+
+    for (const row of rows) {
+        if (row.length !== columnCount) {
+            throw new Error(
+                "All matrix rows must have the same number of columns."
+            );
+        }
+    }
+
+    const matrixNode: MathNode = {
+        type: "matrix",
+        environment,
+        rows: rows.map((row) =>
+            row.map((cell) =>
+                parseSequence(cell)
+            )
+        )
+    };
+
+    return {
+        node: matrixNode,
+        nextIndex:
+            endIndex + endToken.length
     };
 }
 
@@ -746,11 +828,57 @@ function parseSequence(
         let base: MathNode;
 
         /*
+ * -----------------------------------------------------
+ * MATRIX ENVIRONMENT
+ * -----------------------------------------------------
+ */
+if (
+    expression.startsWith(
+        "\\begin{matrix}",
+        index
+    ) ||
+    expression.startsWith(
+        "\\begin{pmatrix}",
+        index
+    ) ||
+    expression.startsWith(
+        "\\begin{bmatrix}",
+        index
+    ) ||
+    expression.startsWith(
+        "\\begin{Bmatrix}",
+        index
+    ) ||
+    expression.startsWith(
+        "\\begin{vmatrix}",
+        index
+    ) ||
+    expression.startsWith(
+        "\\begin{Vmatrix}",
+        index
+    )
+) {
+    const matrix =
+        parseMatrixEnvironment(
+            expression,
+            index
+        );
+
+    base = matrix.node;
+
+    index =
+        matrix.nextIndex;
+}
+
+
+
+
+        /*
          * -----------------------------------------------------
          * DYNAMIC DELIMITER
          * -----------------------------------------------------
          */
-        if (
+        else if (
             expression.startsWith(
                 "\\left",
                 index
