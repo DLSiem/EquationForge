@@ -31,24 +31,134 @@ function setupEditor(): void {
     const radicalButton =
     document.getElementById("radical-button") as HTMLButtonElement;
 
+    
+
     const statusMessage =
         document.getElementById("status-message") as HTMLParagraphElement;
+        
+        updatePreview();    
+        
+            const alphaButton =
+            document.getElementById("alpha-button") as HTMLButtonElement;
+        
+        const betaButton =
+            document.getElementById("beta-button") as HTMLButtonElement;
+        
+        const thetaButton =
+            document.getElementById("theta-button") as HTMLButtonElement;
+        
+        const piButton =
+            document.getElementById("pi-button") as HTMLButtonElement;
+        
+        const infinityButton =
+            document.getElementById("infinity-button") as HTMLButtonElement;
+        
+        const pmButton =
+            document.getElementById("pm-button") as HTMLButtonElement;
+        
+        const timesButton =
+            document.getElementById("times-button") as HTMLButtonElement;
+        
+        const neqButton =
+            document.getElementById("neq-button") as HTMLButtonElement;
 
-    updatePreview();
+        const integralButton =
+    document.getElementById("integral-button") as HTMLButtonElement;
 
-    equationInput.addEventListener("input", updatePreview);
+const sumButton =
+    document.getElementById("sum-button") as HTMLButtonElement;
+
+const productButton =
+    document.getElementById("product-button") as HTMLButtonElement;
+        
+        equationInput.addEventListener("input", updatePreview);
     fontSelect.addEventListener("change", updatePreview);
     fontSize.addEventListener("change", updatePreview);
 
     insertButton.addEventListener("click", insertEquation);
     fractionButton.addEventListener(
-    "click",
+    "click",  
     insertFractionTemplate
-);
+);    
 radicalButton.addEventListener(
     "click",
     insertRadicalTemplate
+);    
+
+alphaButton.addEventListener(
+    "click",
+    () => insertAtCursor("\\alpha")
 );
+
+betaButton.addEventListener(
+    "click",
+    () => insertAtCursor("\\beta")
+);
+
+thetaButton.addEventListener(
+    "click",
+    () => insertAtCursor("\\theta")
+);
+
+piButton.addEventListener(
+    "click",
+    () => insertAtCursor("\\pi")
+);
+
+infinityButton.addEventListener(
+    "click",
+    () => insertAtCursor("\\infty")
+);
+
+pmButton.addEventListener(
+    "click",
+    () => insertAtCursor("\\pm")
+);
+
+timesButton.addEventListener(
+    "click",
+    () => insertAtCursor("\\times")
+);
+
+neqButton.addEventListener(
+    "click",
+    () => insertAtCursor("\\neq")
+);
+
+integralButton.addEventListener(
+    "click",
+    () => insertAtCursor("\\int_{}^{} ")
+);
+
+sumButton.addEventListener(
+    "click",
+    () => insertAtCursor("\\sum_{}^{} ")
+);
+
+productButton.addEventListener(
+    "click",
+    () => insertAtCursor("\\prod_{}^{} ")
+);
+
+
+function insertAtCursor(text: string): void {
+    const start = equationInput.selectionStart;
+    const end = equationInput.selectionEnd;
+
+    equationInput.setRangeText(
+        text,
+        start,
+        end,
+        "end"
+    );
+
+    updatePreview();
+    equationInput.focus();
+}
+    
+
+
+    
   function insertRadicalTemplate(): void {
     const start = equationInput.selectionStart;
     const end = equationInput.selectionEnd;

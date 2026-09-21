@@ -8,6 +8,104 @@
  * structures directly.
  */
 
+/**
+ * LaTeX-style mathematical commands supported by EquationForge.
+ *
+ * The value is the Unicode character that Word will receive
+ * inside the OMML math run.
+ */
+const MATH_COMMANDS: Record<string, string> = {
+    // Greek letters
+    "\\alpha": "α",
+    "\\beta": "β",
+    "\\gamma": "γ",
+    "\\delta": "δ",
+    "\\epsilon": "ϵ",
+    "\\varepsilon": "ε",
+    "\\zeta": "ζ",
+    "\\eta": "η",
+    "\\theta": "θ",
+    "\\vartheta": "ϑ",
+    "\\iota": "ι",
+    "\\kappa": "κ",
+    "\\lambda": "λ",
+    "\\mu": "μ",
+    "\\nu": "ν",
+    "\\xi": "ξ",
+    "\\pi": "π",
+    "\\varpi": "ϖ",
+    "\\rho": "ρ",
+    "\\sigma": "σ",
+    "\\varsigma": "ς",
+    "\\tau": "τ",
+    "\\upsilon": "υ",
+    "\\phi": "ϕ",
+    "\\varphi": "φ",
+    "\\chi": "χ",
+    "\\psi": "ψ",
+    "\\omega": "ω",
+
+    // Capital Greek letters
+    "\\Gamma": "Γ",
+    "\\Delta": "Δ",
+    "\\Theta": "Θ",
+    "\\Lambda": "Λ",
+    "\\Xi": "Ξ",
+    "\\Pi": "Π",
+    "\\Sigma": "Σ",
+    "\\Upsilon": "Υ",
+    "\\Phi": "Φ",
+    "\\Psi": "Ψ",
+    "\\Omega": "Ω",
+
+    // Arithmetic operators
+    "\\pm": "±",
+    "\\mp": "∓",
+    "\\times": "×",
+    "\\div": "÷",
+    "\\cdot": "·",
+
+    // Relations
+    "\\neq": "≠",
+    "\\ne": "≠",
+    "\\leq": "≤",
+    "\\le": "≤",
+    "\\geq": "≥",
+    "\\ge": "≥",
+    "\\approx": "≈",
+    "\\equiv": "≡",
+    "\\sim": "∼",
+    "\\propto": "∝",
+
+    // Set / logic
+    "\\in": "∈",
+    "\\notin": "∉",
+    "\\subset": "⊂",
+    "\\subseteq": "⊆",
+    "\\supset": "⊃",
+    "\\supseteq": "⊇",
+    "\\cup": "∪",
+    "\\cap": "∩",
+    "\\emptyset": "∅",
+    "\\forall": "∀",
+    "\\exists": "∃",
+    "\\neg": "¬",
+
+    // Common symbols
+    "\\infty": "∞",
+    "\\partial": "∂",
+    "\\nabla": "∇",
+
+    // Arrows
+    "\\rightarrow": "→",
+    "\\to": "→",
+    "\\leftarrow": "←",
+    "\\leftrightarrow": "↔",
+    "\\Rightarrow": "⇒",
+    "\\Leftarrow": "⇐",
+    "\\Leftrightarrow": "⇔"
+};
+
 function escapeXml(value: string): string {
     return value
         .replace(/&/g, "&amp;")
@@ -15,6 +113,38 @@ function escapeXml(value: string): string {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&apos;");
+}
+
+/**
+ * Reads a LaTeX-style command beginning with "\".
+ *
+ * Example:
+ *     \alpha
+ *
+ * returns:
+ *     command = "\alpha"
+ *     nextIndex = position after "alpha"
+ */
+function readCommand(
+    expression: string,
+    startIndex: number
+): { command: string; nextIndex: number } | null {
+    if (expression[startIndex] !== "\\") {
+        return null;
+    }
+
+    const match = expression
+        .slice(startIndex)
+        .match(/^\\[A-Za-z]+/);
+
+    if (!match) {
+        return null;
+    }
+
+    return {
+        command: match[0],
+        nextIndex: startIndex + match[0].length
+    };
 }
 
 /**
@@ -161,7 +291,93 @@ function createRadical(
         </m:rad>
     `;
 }
+/**
+ * Creates an OMML n-ary operator.
+ *
+ * Examples:
+ *
+ * \int_0^1 x
+ * \sum_{i=1}^{n} i
+ * \prod_{i=1}^{n} a_i
+ */
+function createNary(
+    operator: string,
+    lower: string | null,
+    upper: string | null,
+    expressionXml: string,
+    fontName: string,
+    fontSize: number
+): string {
+    const safeFont = escapeXml(fontName);
+    const halfPointSize = Math.round(fontSize * 2);
 
+    const lowerXml =
+        lower !== null
+            ? `
+                <m:sub>
+                    ${parseExpression(
+                        lower,
+                        fontName,
+                        fontSize
+                    )}
+                </m:sub>
+            `
+            : "";
+
+    const upperXml =
+        upper !== null
+            ? `
+                <m:sup>
+                    ${parseExpression(
+                        upper,
+                        fontName,
+                        fontSize
+                    )}
+                </m:sup>
+            `
+            : "";
+
+    return `
+        <m:nary>
+            <m:naryPr>
+
+                <m:chr m:val="${escapeXml(operator)}"/>
+
+                <!--
+                    The n-ary operator itself (∫, ∑, ∏, etc.)
+                    is a control character, so its font must
+                    be specified through m:ctrlPr.
+                -->
+                <m:ctrlPr>
+                    <w:rPr>
+                        <w:rFonts
+                            w:ascii="${safeFont}"
+                            w:hAnsi="${safeFont}"
+                            w:eastAsia="${safeFont}"
+                            w:cs="${safeFont}" />
+
+                        <w:sz w:val="${halfPointSize}" />
+                        <w:szCs w:val="${halfPointSize}" />
+                    </w:rPr>
+                </m:ctrlPr>
+
+                <m:limLoc m:val="subSup"/>
+
+                <m:grow m:val="1"/>
+
+            </m:naryPr>
+
+            ${lowerXml}
+
+            ${upperXml}
+
+            <m:e>
+                ${expressionXml}
+            </m:e>
+
+        </m:nary>
+    `;
+}
 /**
  * Read one group:
  *
@@ -173,6 +389,8 @@ function createRadical(
  *
  * If there is no {}, a single character is returned.
  */
+
+
 function readScriptContent(
     expression: string,
     startIndex: number
@@ -214,6 +432,206 @@ function readScriptContent(
     return {
         content: expression[startIndex],
         nextIndex: startIndex + 1,
+    };
+}
+
+/**
+ * Reads a limited/subscripted n-ary expression.
+ *
+ * Example:
+ *
+ *     \int_0^1 x
+ *
+ * The result contains:
+ *     lower = "0"
+ *     upper = "1"
+ *     expression = "x"
+ */
+function readNaryExpression(
+    expression: string,
+    startIndex: number,
+    fontName: string,
+    fontSize: number
+): {
+    lower: string | null;
+    upper: string | null;
+    expression: string;
+    nextIndex: number;
+} {
+    let index = startIndex;
+
+    let lower: string | null = null;
+    let upper: string | null = null;
+
+    while (
+        index < expression.length &&
+        (expression[index] === "_" ||
+            expression[index] === "^")
+    ) {
+        const operator = expression[index];
+        index++;
+
+        const script = readScriptContent(
+            expression,
+            index
+        );
+
+        index = script.nextIndex;
+
+        if (operator === "_") {
+            if (lower !== null) {
+                throw new Error(
+                    "An n-ary operator cannot have two lower limits."
+                );
+            }
+
+            lower = script.content;
+        } else {
+            if (upper !== null) {
+                throw new Error(
+                    "An n-ary operator cannot have two upper limits."
+                );
+            }
+
+            upper = script.content;
+        }
+    }
+
+    /*
+     * We currently bind the n-ary operator to the next
+     * mathematical atom, including its own subscript/
+     * superscript.
+     *
+     * Example:
+     *
+     * \int_0^1 x^2
+     *
+     * becomes:
+     *
+     * Integral
+     * └── x^2
+     */
+
+    if (index >= expression.length) {
+        throw new Error(
+            "The n-ary operator is missing its expression."
+        );
+    }
+
+    const base = readBase(
+        expression,
+        index,
+        fontName,
+        fontSize
+    );
+
+    index = base.nextIndex;
+
+    let subscript: string | null = null;
+    let superscript: string | null = null;
+
+    while (
+        index < expression.length &&
+        (expression[index] === "_" ||
+            expression[index] === "^")
+    ) {
+        const operator = expression[index];
+        index++;
+
+        const script = readScriptContent(
+            expression,
+            index
+        );
+
+        index = script.nextIndex;
+
+        if (operator === "_") {
+            if (subscript !== null) {
+                throw new Error(
+                    "The expression cannot have two subscripts."
+                );
+            }
+
+            subscript = script.content;
+        } else {
+            if (superscript !== null) {
+                throw new Error(
+                    "The expression cannot have two superscripts."
+                );
+            }
+
+            superscript = script.content;
+        }
+    }
+
+    let expressionXml = base.omml;
+
+    if (
+        subscript !== null &&
+        superscript !== null
+    ) {
+        expressionXml = `
+            <m:sSubSup>
+                <m:e>
+                    ${base.omml}
+                </m:e>
+
+                <m:sub>
+                    ${parseExpression(
+                        subscript,
+                        fontName,
+                        fontSize
+                    )}
+                </m:sub>
+
+                <m:sup>
+                    ${parseExpression(
+                        superscript,
+                        fontName,
+                        fontSize
+                    )}
+                </m:sup>
+            </m:sSubSup>
+        `;
+    } else if (superscript !== null) {
+        expressionXml = `
+            <m:sSup>
+                <m:e>
+                    ${base.omml}
+                </m:e>
+
+                <m:sup>
+                    ${parseExpression(
+                        superscript,
+                        fontName,
+                        fontSize
+                    )}
+                </m:sup>
+            </m:sSup>
+        `;
+    } else if (subscript !== null) {
+        expressionXml = `
+            <m:sSub>
+                <m:e>
+                    ${base.omml}
+                </m:e>
+
+                <m:sub>
+                    ${parseExpression(
+                        subscript,
+                        fontName,
+                        fontSize
+                    )}
+                </m:sub>
+            </m:sSub>
+        `;
+    }
+
+    return {
+        lower,
+        upper,
+        expression: expressionXml,
+        nextIndex: index
     };
 }
 
@@ -283,6 +701,121 @@ function parseExpression(
         if (character === "}") {
             break;
         }
+
+        /*
+ * ---------------------------------------------------------
+ * N-ARY OPERATORS
+ *
+ * \int
+ * \sum
+ * \prod
+ * \oint
+ * \bigcup
+ * \bigcap
+ * ---------------------------------------------------------
+ */
+if (
+    expression.startsWith("\\int", index) ||
+    expression.startsWith("\\sum", index) ||
+    expression.startsWith("\\prod", index) ||
+    expression.startsWith("\\oint", index) ||
+    expression.startsWith("\\bigcup", index) ||
+    expression.startsWith("\\bigcap", index)
+) {
+    let command: string;
+
+    if (expression.startsWith("\\oint", index)) {
+        command = "\\oint";
+    } else if (expression.startsWith("\\int", index)) {
+        command = "\\int";
+    } else if (expression.startsWith("\\sum", index)) {
+        command = "\\sum";
+    } else if (expression.startsWith("\\prod", index)) {
+        command = "\\prod";
+    } else if (expression.startsWith("\\bigcup", index)) {
+        command = "\\bigcup";
+    } else {
+        command = "\\bigcap";
+    }
+
+    index += command.length;
+
+    const operatorMap: Record<string, string> = {
+        "\\int": "∫",
+        "\\sum": "∑",
+        "\\prod": "∏",
+        "\\oint": "∮",
+        "\\bigcup": "⋃",
+        "\\bigcap": "⋂"
+    };
+
+    const nary = readNaryExpression(
+        expression,
+        index,
+        fontName,
+        fontSize
+    );
+
+    index = nary.nextIndex;
+
+    result += createNary(
+        operatorMap[command],
+        nary.lower,
+        nary.upper,
+        nary.expression,
+        fontName,
+        fontSize
+    );
+
+    continue;
+}
+
+        /*
+ * ---------------------------------------------------------
+ * GENERAL MATHEMATICAL COMMANDS
+ *
+ * Examples:
+ * \alpha
+ * \beta
+ * \times
+ * \neq
+ * \infty
+ * ---------------------------------------------------------
+ */
+const commandToken = readCommand(
+    expression,
+    index
+);
+
+if (commandToken) {
+    /*
+     * Special structural commands such as \frac and \sqrt
+     * must be handled by their own parser sections.
+     */
+    if (
+        commandToken.command !== "\\frac" &&
+        commandToken.command !== "\\sqrt"
+    ) {
+        const symbol =
+            MATH_COMMANDS[commandToken.command];
+
+        if (!symbol) {
+            throw new Error(
+                `Unsupported mathematical command: ${commandToken.command}`
+            );
+        }
+
+        result += createMathRun(
+            symbol,
+            fontName,
+            fontSize
+        );
+
+        index = commandToken.nextIndex;
+
+        continue;
+    }
+}
 
         /*
  * ---------------------------------------------------------
