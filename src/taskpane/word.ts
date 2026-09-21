@@ -31,7 +31,10 @@ function setupEditor(): void {
     const radicalButton =
     document.getElementById("radical-button") as HTMLButtonElement;
 
-    
+    const matrixButton =
+    document.getElementById(
+        "matrix-button"
+    ) as HTMLButtonElement;
 
     const statusMessage =
         document.getElementById("status-message") as HTMLParagraphElement;
@@ -79,7 +82,13 @@ const productButton =
     fractionButton.addEventListener(
     "click",  
     insertFractionTemplate
-);    
+);   
+
+matrixButton.addEventListener(
+    "click",
+    insertMatrixTemplate
+);
+
 radicalButton.addEventListener(
     "click",
     insertRadicalTemplate
@@ -139,6 +148,24 @@ productButton.addEventListener(
     "click",
     () => insertAtCursor("\\prod_{}^{} ")
 );
+
+function insertMatrixTemplate(): void {
+    const start = equationInput.selectionStart;
+    const end = equationInput.selectionEnd;
+
+    const matrixTemplate =
+        "\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}";
+
+    equationInput.setRangeText(
+        matrixTemplate,
+        start,
+        end,
+        "end"
+    );
+
+    updatePreview();
+    equationInput.focus();
+}
 
 
 function insertAtCursor(text: string): void {

@@ -378,6 +378,182 @@ function createNary(
         </m:nary>
     `;
 }
+
+/**
+ * Creates an OMML delimiter object.
+ *
+ * Examples:
+ *
+ * \left( x \right)
+ * \left[ x \right]
+ * \left\{ x \right\}
+ *
+ * The "grow" property tells Word to resize the
+ * delimiters to the height of the enclosed expression.
+ */
+function createDelimiter(
+    content: string,
+    begin: string,
+    end: string,
+    fontName: string,
+    fontSize: number
+): string {
+    const safeBegin = escapeXml(begin);
+    const safeEnd = escapeXml(end);
+
+    return `
+        <m:d>
+            <m:dPr>
+                <m:begChr m:val="${safeBegin}"/>
+                <m:endChr m:val="${safeEnd}"/>
+                <m:grow m:val="1"/>
+            </m:dPr>
+
+            <m:e>
+                ${parseExpression(
+                    content,
+                    fontName,
+                    fontSize
+                )}
+            </m:e>
+        </m:d>
+    `;
+}
+
+/**
+ * Creates an OMML matrix.
+ *
+ * Supported environments:
+ *
+ * matrix   -> no outer brackets
+ * pmatrix  -> ( )
+ * bmatrix  -> [ ]
+ * Bmatrix  -> { }
+ * vmatrix  -> | |
+ * Vmatrix  -> ‖ ‖
+ */
+function createMatrix(
+    rows: string[][],
+    environment: string,
+    fontName: string,
+    fontSize: number
+): string {
+    const matrixRows = rows.map((row) => {
+        const cells = row.map((cell) => {
+            return `
+                <m:e>
+                    ${parseExpression(
+                        cell.trim(),
+                        fontName,
+                        fontSize
+                    )}
+                </m:e>
+            `;
+        }).join("");
+
+        return `
+            <m:mr>
+                ${cells}
+            </m:mr>
+        `;
+    }).join("");
+
+    const safeFont = escapeXml(fontName);
+    const halfPointSize = Math.round(fontSize * 2);
+
+    const matrixXml = `
+        <m:m>
+
+            <m:mPr>
+
+                <m:ctrlPr>
+                    <w:rPr>
+                        <w:rFonts
+                            w:ascii="${safeFont}"
+                            w:hAnsi="${safeFont}"
+                            w:eastAsia="${safeFont}"
+                            w:cs="${safeFont}" />
+
+                        <w:sz w:val="${halfPointSize}" />
+                        <w:szCs w:val="${halfPointSize}" />
+                    </w:rPr>
+                </m:ctrlPr>
+
+            </m:mPr>
+
+            ${matrixRows}
+
+        </m:m>
+    `;
+
+    const delimiterMap: Record<
+        string,
+        { begin: string; end: string } | null
+    > = {
+        matrix: null,
+        pmatrix: {
+            begin: "(",
+            end: ")"
+        },
+        bmatrix: {
+            begin: "[",
+            end: "]"
+        },
+        Bmatrix: {
+            begin: "{",
+            end: "}"
+        },
+        vmatrix: {
+            begin: "|",
+            end: "|"
+        },
+        Vmatrix: {
+            begin: "‖",
+            end: "‖"
+        }
+    };
+
+    const delimiters = delimiterMap[environment];
+
+    if (!delimiters) {
+        return matrixXml;
+    }
+
+    return `
+        <m:d>
+
+            <m:dPr>
+                <m:begChr
+                    m:val="${escapeXml(delimiters.begin)}" />
+
+                <m:endChr
+                    m:val="${escapeXml(delimiters.end)}" />
+
+                <m:grow m:val="1" />
+
+                <m:ctrlPr>
+                    <w:rPr>
+                        <w:rFonts
+                            w:ascii="${safeFont}"
+                            w:hAnsi="${safeFont}"
+                            w:eastAsia="${safeFont}"
+                            w:cs="${safeFont}" />
+
+                        <w:sz w:val="${halfPointSize}" />
+                        <w:szCs w:val="${halfPointSize}" />
+                    </w:rPr>
+                </m:ctrlPr>
+
+            </m:dPr>
+
+            <m:e>
+                ${matrixXml}
+            </m:e>
+
+        </m:d>
+    `;
+}
+
 /**
  * Read one group:
  *
@@ -674,6 +850,249 @@ function readBase(
     };
 }
 
+
+/**
+ * Reads a \left ... \right delimiter expression.
+ *
+ * Example:
+ *
+ * \left( x^2+1 \right)
+ *
+ * Returns the enclosed expression and matching delimiters.
+ */
+function readDelimitedExpression(
+    expression: string,
+    startIndex: number
+): {
+    content: string;
+    begin: string;
+    end: string;
+    nextIndex: number;
+} {
+    let index = startIndex;
+
+    // We are currently positioned after "\left".
+    while (
+        index < expression.length &&
+        /\s/.test(expression[index])
+    ) {
+        index++;
+    }
+
+    const beginResult = readDelimiterToken(
+        expression,
+        index
+    );
+
+    const begin = beginResult.token;
+
+    index = beginResult.nextIndex;
+
+    const contentStart = index;
+
+    let depth = 1;
+
+    while (index < expression.length) {
+        if (expression.startsWith("\\left", index)) {
+            depth++;
+            index += "\\left".length;
+            continue;
+        }
+
+        if (expression.startsWith("\\right", index)) {
+            depth--;
+
+            if (depth === 0) {
+                const content = expression.slice(
+                    contentStart,
+                    index
+                );
+
+                index += "\\right".length;
+
+                while (
+                    index < expression.length &&
+                    /\s/.test(expression[index])
+                ) {
+                    index++;
+                }
+
+                const endResult = readDelimiterToken(
+                    expression,
+                    index
+                );
+
+                return {
+                    content,
+                    begin,
+                    end: endResult.token,
+                    nextIndex: endResult.nextIndex
+                };
+            }
+
+            index += "\\right".length;
+            continue;
+        }
+
+        index++;
+    }
+
+    throw new Error(
+        "Missing matching \\right delimiter."
+    );
+}
+
+/**
+ * Reads the delimiter immediately after \left or \right.
+ *
+ * Supported delimiters:
+ *
+ * ( ) [ ] { } | || < > \langle \rangle
+ */
+function readDelimiterToken(
+    expression: string,
+    startIndex: number
+): {
+    token: string;
+    nextIndex: number;
+} {
+    const remaining = expression.slice(startIndex);
+
+    const commandDelimiters: Array<{
+        input: string;
+        output: string;
+    }> = [
+        { input: "\\langle", output: "⟨" },
+        { input: "\\rangle", output: "⟩" },
+        { input: "\\lceil", output: "⌈" },
+        { input: "\\rceil", output: "⌉" },
+        { input: "\\lfloor", output: "⌊" },
+        { input: "\\rfloor", output: "⌋" },
+        { input: "\\lvert", output: "|" },
+        { input: "\\rvert", output: "|" },
+        { input: "\\Vert", output: "‖" }
+    ];
+
+    for (const delimiter of commandDelimiters) {
+        if (remaining.startsWith(delimiter.input)) {
+            return {
+                token: delimiter.output,
+                nextIndex:
+                    startIndex + delimiter.input.length
+            };
+        }
+    }
+
+    const character = expression[startIndex];
+
+    const simpleDelimiters: Record<string, string> = {
+        "(": "(",
+        ")": ")",
+        "[": "[",
+        "]": "]",
+        "{": "{",
+        "}": "}",
+        "|": "|",
+        "<": "⟨",
+        ">": "⟩"
+    };
+
+    const token = simpleDelimiters[character];
+
+    if (!token) {
+        throw new Error(
+            `Unsupported delimiter near position ${startIndex}.`
+        );
+    }
+
+    return {
+        token,
+        nextIndex: startIndex + 1
+    };
+}
+
+/**
+ * Reads a LaTeX-style matrix environment.
+ *
+ * Example:
+ *
+ * \begin{pmatrix}
+ *     a & b \\
+ *     c & d
+ * \end{pmatrix}
+ */
+function readMatrixEnvironment(
+    expression: string,
+    startIndex: number,
+    fontName: string,
+    fontSize: number
+): {
+    omml: string;
+    nextIndex: number;
+} | null {
+    const remaining = expression.slice(startIndex);
+
+    const beginMatch = remaining.match(
+        /^\\begin\{(matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix)\}/
+    );
+
+    if (!beginMatch) {
+        return null;
+    }
+
+    const environment = beginMatch[1];
+
+    const bodyStart =
+        startIndex + beginMatch[0].length;
+
+    const endToken =
+        `\\end{${environment}}`;
+
+    const endIndex =
+        expression.indexOf(
+            endToken,
+            bodyStart
+        );
+
+    if (endIndex === -1) {
+        throw new Error(
+            `Missing ${endToken} in matrix.`
+        );
+    }
+
+    const body = expression.slice(
+        bodyStart,
+        endIndex
+    );
+
+    /*
+     * A matrix uses:
+     *
+     * &  -> new column
+     * \\ -> new row
+     */
+    const rows = body
+        .split(/\\\\/)
+        .map((row) =>
+            row
+                .split("&")
+                .map((cell) => cell.trim())
+        );
+
+    const omml = createMatrix(
+        rows,
+        environment,
+        fontName,
+        fontSize
+    );
+
+    return {
+        omml,
+        nextIndex:
+            endIndex + endToken.length
+    };
+}
+
 /**
  * Converts a normal mathematical expression into OMML.
  *
@@ -701,6 +1120,7 @@ function parseExpression(
         if (character === "}") {
             break;
         }
+
 
         /*
  * ---------------------------------------------------------
@@ -767,6 +1187,56 @@ if (
         fontSize
     );
 
+    continue;
+}
+
+
+/*
+ * ---------------------------------------------------------
+ * DYNAMIC DELIMITERS
+ *
+ * \left( ... \right)
+ * \left[ ... \right]
+ * \left\{ ... \right\}
+ * ---------------------------------------------------------
+ */
+if (expression.startsWith("\\left", index)) {
+    index += "\\left".length;
+
+    const delimiter = readDelimitedExpression(
+        expression,
+        index
+    );
+
+    index = delimiter.nextIndex;
+
+    result += createDelimiter(
+        delimiter.content,
+        delimiter.begin,
+        delimiter.end,
+        fontName,
+        fontSize
+    );
+
+    continue;
+}
+
+
+/*
+ * ---------------------------------------------------------
+ * MATRIX ENVIRONMENTS
+ * ---------------------------------------------------------
+ */
+const matrix = readMatrixEnvironment(
+    expression,
+    index,
+    fontName,
+    fontSize
+);
+
+if (matrix) {
+    result += matrix.omml;
+    index = matrix.nextIndex;
     continue;
 }
 
