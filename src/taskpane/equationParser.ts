@@ -129,6 +129,22 @@ const MATH_SYMBOLS: Record<string, string> = {
   "\\searrow": "↘",
   "\\swarrow": "↙",
   "\\nwarrow": "↖",
+
+  "\\,": "\u2009",
+};
+
+const MATH_SPACES: Record<string, string> = {
+  "\\,": "\u2009", // Thin space
+  "\\:": "\u205F", // Medium mathematical space
+  "\\;": "\u2004", // Three-per-em / thick space
+  "\\!": "\u200B", // Zero-width space (negative spacing approximation)
+
+  "\\enspace": "\u2002", // En space
+  "\\quad": "\u2003", // Em space
+  "\\qquad": "\u2003\u2003", // Double em space
+
+  "\\medspace": "\u205F",
+  "\\thickspace": "\u2004",
 };
 
 const NARY_COMMANDS: Record<string, string> = {
@@ -230,7 +246,7 @@ function readCommand(
     return null;
   }
 
-  const match = expression.slice(startIndex).match(/^\\[A-Za-z]+/);
+  const match = expression.slice(startIndex).match(/^\\(?:[A-Za-z]+|[,;:!])/);
 
   if (!match) {
     return null;
@@ -239,6 +255,35 @@ function readCommand(
   return {
     command: match[0],
     nextIndex: startIndex + match[0].length,
+  };
+}
+
+function parseSpacing(
+  expression: string,
+  startIndex: number
+): {
+  node: MathNode;
+  nextIndex: number;
+} | null {
+  const command = readCommand(expression, startIndex);
+
+  if (!command) {
+    return null;
+  }
+
+  const spacing = MATH_SPACES[command.command];
+
+  if (spacing === undefined) {
+    return null;
+  }
+
+  return {
+    node: {
+      type: "text",
+      value: spacing,
+    },
+
+    nextIndex: command.nextIndex,
   };
 }
 
@@ -1667,7 +1712,114 @@ function readSingleAtom(
   node: MathNode;
   nextIndex: number;
 } {
-  const index = startIndex;
+  let index = startIndex;
+
+  const spacing = parseSpacing(expression, index);
+
+  if (spacing) {
+    return spacing;
+  }
+
+  /*
+   * -----------------------------------------------------
+   * UNGROUPED FRACTION
+   * -----------------------------------------------------
+   *
+   * \frac{a}{b}
+   *
+   * Needed for n-ary bodies such as:
+   *
+   * \sum_{i=1}^{n}\frac{i^2+1}{\sqrt{i}}
+   * -----------------------------------------------------
+   */
+
+  if (expression.startsWith("\\frac", index)) {
+    index += "\\frac".length;
+
+    while (index < expression.length && /\s/.test(expression[index] ?? "")) {
+      index++;
+    }
+
+    if (expression[index] !== "{") {
+      throw new Error("\\frac requires a numerator in { }.");
+    }
+
+    const numerator = readGroup(expression, index);
+
+    index = numerator.nextIndex;
+
+    while (index < expression.length && /\s/.test(expression[index] ?? "")) {
+      index++;
+    }
+
+    if (expression[index] !== "{") {
+      throw new Error("\\frac requires a denominator in { }.");
+    }
+
+    const denominator = readGroup(expression, index);
+
+    return {
+      node: {
+        type: "fraction",
+
+        numerator: parseSequence(numerator.content),
+
+        denominator: parseSequence(denominator.content),
+      },
+
+      nextIndex: denominator.nextIndex,
+    };
+  }
+
+  /*
+   * -----------------------------------------------------
+   * UNGROUPED RADICAL
+   * -----------------------------------------------------
+   *
+   * \sqrt{x}
+   * \sqrt[3]{x}
+   * -----------------------------------------------------
+   */
+
+  if (expression.startsWith("\\sqrt", index)) {
+    index += "\\sqrt".length;
+
+    while (index < expression.length && /\s/.test(expression[index] ?? "")) {
+      index++;
+    }
+
+    let degree: MathNode | null = null;
+
+    if (expression[index] === "[") {
+      const degreeGroup = readSquareBracketGroup(expression, index);
+
+      degree = parseSequence(degreeGroup.content);
+
+      index = degreeGroup.nextIndex;
+
+      while (index < expression.length && /\s/.test(expression[index] ?? "")) {
+        index++;
+      }
+    }
+
+    if (expression[index] !== "{") {
+      throw new Error("\\sqrt requires an expression in { }.");
+    }
+
+    const radicand = readGroup(expression, index);
+
+    return {
+      node: {
+        type: "radical",
+
+        degree,
+
+        radicand: parseSequence(radicand.content),
+      },
+
+      nextIndex: radicand.nextIndex,
+    };
+  }
 
   /*
    * -----------------------------------------------------
@@ -1821,6 +1973,26 @@ function parseSequence(expression: string): SequenceNode {
   let index = 0;
 
   while (index < expression.length) {
+    /*
+     * Ignore ordinary whitespace in math mode.
+     *
+     * Explicit spacing commands such as:
+     *
+     * \,
+     * \:
+     * \;
+     * \quad
+     * \qquad
+     *
+     * are handled separately and are preserved.
+     */
+    while (index < expression.length && /\s/.test(expression[index] ?? "")) {
+      index++;
+    }
+
+    if (index >= expression.length) {
+      break;
+    }
     if (expression[index] === "}") {
       break;
     }
@@ -1855,6 +2027,18 @@ function parseSequence(expression: string): SequenceNode {
         base = matrix.node;
         index = matrix.nextIndex;
       }
+    } else if (
+      expression[index] === "\\" &&
+      MATH_SPACES[readCommand(expression, index)?.command ?? ""] !== undefined
+    ) {
+      const spacing = parseSpacing(expression, index);
+
+      if (!spacing) {
+        throw new Error(`Invalid spacing command near position ${index}.`);
+      }
+
+      base = spacing.node;
+      index = spacing.nextIndex;
     }
 
     /*

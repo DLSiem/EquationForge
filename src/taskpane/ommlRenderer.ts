@@ -29,6 +29,8 @@ export interface MathRenderOptions {
 export class OmmlRenderer {
   constructor(private readonly options: MathRenderOptions) {}
 
+  private mathScriptLevel = 0;
+
   public render(node: MathNode): string {
     switch (node.type) {
       case "text":
@@ -92,6 +94,41 @@ export class OmmlRenderer {
     }
   }
 
+  private renderArgument(content: string, size: number = 0): string {
+    /*
+     * When we are already inside a superscript,
+     * subscript, limit, or other script-level
+     * structure, do not reset normal arguments
+     * back to the main equation size.
+     */
+    if (this.mathScriptLevel > 0 && size === 0) {
+      return `
+            <m:e>
+                ${content}
+            </m:e>
+        `;
+    }
+
+    return `
+        <m:e>
+            <m:argPr>
+                <m:argSz m:val="${size}"/>
+            </m:argPr>
+
+            ${content}
+        </m:e>
+    `;
+  }
+  private renderAtScriptLevel(node: MathNode): string {
+    this.mathScriptLevel++;
+
+    try {
+      return this.render(node);
+    } finally {
+      this.mathScriptLevel--;
+    }
+  }
+
   private renderFunction(node: FunctionNode): string {
     const font = escapeXml(this.options.fontName);
 
@@ -137,7 +174,7 @@ export class OmmlRenderer {
             </m:e>
 
             <m:lim>
-                ${this.render(node.subscript)}
+                ${this.renderAtScriptLevel(node.subscript)}
             </m:lim>
         </m:limLow>
     `;
@@ -169,10 +206,10 @@ export class OmmlRenderer {
                     ${functionRun}
                 </m:e>
                 <m:sub>
-                    ${this.render(node.subscript)}
+                    ${this.renderAtScriptLevel(node.subscript)}
                 </m:sub>
                 <m:sup>
-                    ${this.render(node.superscript)}
+                    ${this.renderAtScriptLevel(node.superscript)}
                 </m:sup>
             </m:sSubSup>
         `;
@@ -183,7 +220,7 @@ export class OmmlRenderer {
                     ${functionRun}
                 </m:e>
                 <m:sub>
-                    ${this.render(node.subscript)}
+                    ${this.renderAtScriptLevel(node.subscript)}
                 </m:sub>
             </m:sSub>
         `;
@@ -194,7 +231,7 @@ export class OmmlRenderer {
                     ${functionRun}
                 </m:e>
                 <m:sup>
-                    ${this.render(node.superscript)}
+                    ${this.renderAtScriptLevel(node.superscript)}
                 </m:sup>
             </m:sSup>
         `;
@@ -732,7 +769,7 @@ export class OmmlRenderer {
                 <w:szCs w:val="${size}"/>
             </w:rPr>
 
-            <m:t>${escapeXml(node.value)}</m:t>
+            <m:t xml:space="preserve">${escapeXml(node.value)}</m:t>
         </m:r>
     `.trim();
   }
@@ -943,7 +980,7 @@ export class OmmlRenderer {
     const degree = node.degree
       ? `
             <m:deg>
-                ${this.render(node.degree)}
+                ${this.renderAtScriptLevel(node.degree)}
             </m:deg>
         `
       : `
@@ -1006,50 +1043,54 @@ export class OmmlRenderer {
   private renderScript(node: ScriptNode): string {
     const base = this.render(node.base);
 
-    if (node.subscript && node.superscript) {
+    const sub = node.subscript ? this.renderAtScriptLevel(node.subscript) : null;
+
+    const sup = node.superscript ? this.renderAtScriptLevel(node.superscript) : null;
+
+    if (sub && sup) {
       return `
-                <m:sSubSup>
-                    <m:e>
-                        ${base}
-                    </m:e>
+            <m:sSubSup>
+                <m:e>
+                    ${base}
+                </m:e>
 
-                    <m:sub>
-                        ${this.render(node.subscript)}
-                    </m:sub>
+                <m:sub>
+                    ${sub}
+                </m:sub>
 
-                    <m:sup>
-                        ${this.render(node.superscript)}
-                    </m:sup>
-                </m:sSubSup>
-            `;
+                <m:sup>
+                    ${sup}
+                </m:sup>
+            </m:sSubSup>
+        `;
     }
 
-    if (node.superscript) {
+    if (sup) {
       return `
-                <m:sSup>
-                    <m:e>
-                        ${base}
-                    </m:e>
+            <m:sSup>
+                <m:e>
+                    ${base}
+                </m:e>
 
-                    <m:sup>
-                        ${this.render(node.superscript)}
-                    </m:sup>
-                </m:sSup>
-            `;
+                <m:sup>
+                    ${sup}
+                </m:sup>
+            </m:sSup>
+        `;
     }
 
-    if (node.subscript) {
+    if (sub) {
       return `
-                <m:sSub>
-                    <m:e>
-                        ${base}
-                    </m:e>
+            <m:sSub>
+                <m:e>
+                    ${base}
+                </m:e>
 
-                    <m:sub>
-                        ${this.render(node.subscript)}
-                    </m:sub>
-                </m:sSub>
-            `;
+                <m:sub>
+                    ${sub}
+                </m:sub>
+            </m:sSub>
+        `;
     }
 
     return base;
@@ -1126,20 +1167,31 @@ export class OmmlRenderer {
 
     const lower = node.lower
       ? `
-                    <m:sub>
-                        ${this.render(node.lower)}
-                    </m:sub>
-                `
+        <m:sub>
+
+            <m:argPr>
+                <m:argSz m:val="0"/>
+            </m:argPr>
+
+            ${this.render(node.lower)}
+
+        </m:sub>
+    `
       : "";
 
     const upper = node.upper
       ? `
-                    <m:sup>
-                        ${this.render(node.upper)}
-                    </m:sup>
-                `
-      : "";
+        <m:sup>
 
+            <m:argPr>
+                <m:argSz m:val="0"/>
+            </m:argPr>
+
+            ${this.render(node.upper)}
+
+        </m:sup>
+    `
+      : "";
     return `
             <m:nary>
                 <m:naryPr>
@@ -1160,7 +1212,7 @@ export class OmmlRenderer {
                     </m:ctrlPr>
 
                     <m:limLoc m:val="subSup"/>
-                    <m:grow m:val="1"/>
+                    <m:grow m:val="0"/>
                 </m:naryPr>
 
                 ${lower}
@@ -1643,6 +1695,10 @@ export class OmmlRenderer {
         <pkg:package
             xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage">
 
+            <!-- ================================================== -->
+            <!-- Package relationships                              -->
+            <!-- ================================================== -->
+
             <pkg:part
                 pkg:name="/_rels/.rels"
                 pkg:contentType="application/vnd.openxmlformats-package.relationships+xml"
@@ -1664,6 +1720,66 @@ export class OmmlRenderer {
 
             </pkg:part>
 
+
+            <!-- ================================================== -->
+            <!-- Main document relationships                       -->
+            <!-- ================================================== -->
+
+            <pkg:part
+                pkg:name="/word/_rels/document.xml.rels"
+                pkg:contentType="application/vnd.openxmlformats-package.relationships+xml"
+                pkg:padding="512">
+
+                <pkg:xmlData>
+
+                    <Relationships
+                        xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+
+                        <Relationship
+                            Id="rIdSettings"
+                            Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings"
+                            Target="settings.xml"/>
+
+                    </Relationships>
+
+                </pkg:xmlData>
+
+            </pkg:part>
+
+
+            <!-- ================================================== -->
+            <!-- Document settings                                  -->
+            <!-- ================================================== -->
+
+            <pkg:part
+                pkg:name="/word/settings.xml"
+                pkg:contentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"
+                pkg:padding="512">
+
+                <pkg:xmlData>
+
+                    <w:settings
+                        xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                        xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">
+
+                        <m:mathPr>
+
+                            <!-- Disable Word's small-fraction mode -->
+                            <m:smallFrac m:val="0"/>
+
+                        </m:mathPr>
+
+                    </w:settings>
+
+                </pkg:xmlData>
+
+            </pkg:part>
+
+
+            <!-- ================================================== -->
+            <!-- Main document                                     -->
+            <!-- ================================================== -->
+
             <pkg:part
                 pkg:name="/word/document.xml"
                 pkg:contentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml">
@@ -1679,9 +1795,11 @@ export class OmmlRenderer {
                             <w:p>
 
                                 <m:oMathPara>
+
                                     <m:oMath>
                                         ${mathContent}
                                     </m:oMath>
+
                                 </m:oMathPara>
 
                             </w:p>
@@ -1695,7 +1813,7 @@ export class OmmlRenderer {
             </pkg:part>
 
         </pkg:package>
-    `;
+    `.trim();
   }
 }
 
