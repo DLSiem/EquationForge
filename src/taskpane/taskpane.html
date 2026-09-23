@@ -1,141 +1,560 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
+  <head>
     <meta charset="UTF-8" />
+
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <title>EquationForge</title>
 
-    <!-- Microsoft Office JavaScript API -->
     <script
-        type="text/javascript"
-        src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js">
-    </script>
+      type="text/javascript"
+      src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"
+    ></script>
 
-    <!-- Our styles -->
     <link href="taskpane.css" rel="stylesheet" type="text/css" />
-</head>
+  </head>
 
-<body>
+  <body>
     <main class="equationforge">
-        <header class="app-header">
-            <h1>EquationForge</h1>
-            <p>Mathematical Formula Editor</p>
-        </header>
+      <!-- HEADER -->
+      <header class="app-header">
+        <div>
+          <h1>EquationForge</h1>
 
-        <section class="editor-section">
+          <p>Mathematical Formula Editor</p>
+        </div>
+      </header>
 
-            <div class="control-row">
-                <label for="font-select">Font</label>
+      <!-- EDITOR -->
+      <section class="editor-section">
+        <!-- FONT CONTROLS -->
 
-                <select id="font-select">
-                    <option value="Arial">Arial</option>
-                    <option value="Times New Roman">Times New Roman</option>
-                    <option value="Cambria Math">Cambria Math</option>
-                    <option value="Calibri">Calibri</option>
-                    <option value="Georgia">Georgia</option>
-                </select>
+        <div class="editor-controls">
+          <div class="control-item">
+            <label for="font-select"> Font </label>
+
+            <select id="font-select">
+              <option value="Arial">Arial</option>
+
+              <option value="Times New Roman">Times New Roman</option>
+
+              <option value="Cambria Math">Cambria Math</option>
+
+              <option value="Calibri">Calibri</option>
+
+              <option value="Georgia">Georgia</option>
+            </select>
+          </div>
+
+          <div class="control-item">
+            <label for="font-size"> Size </label>
+
+            <select id="font-size">
+              <option value="10">10</option>
+
+              <option value="11">11</option>
+
+              <option value="12" selected>12</option>
+
+              <option value="14">14</option>
+
+              <option value="16">16</option>
+
+              <option value="18">18</option>
+
+              <option value="20">20</option>
+
+              <option value="24">24</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- TOOL CATEGORY NAVIGATION -->
+
+        <nav class="tool-navigation" aria-label="Equation tools">
+          <button
+            type="button"
+            class="tool-tab active"
+            data-tool-category="structures"
+            title="Structures"
+          >
+            ▣
+            <span>Structures</span>
+          </button>
+
+          <button type="button" class="tool-tab" data-tool-category="operators" title="Operators">
+            ∑
+            <span>Operators</span>
+          </button>
+
+          <button type="button" class="tool-tab" data-tool-category="functions" title="Functions">
+            ƒ
+            <span>Functions</span>
+          </button>
+
+          <button type="button" class="tool-tab" data-tool-category="accents" title="Accents">
+            x̂
+            <span>Accents</span>
+          </button>
+
+          <button
+            type="button"
+            class="tool-tab"
+            data-tool-category="annotations"
+            title="Braces and annotations"
+          >
+            ⏞
+            <span>Braces</span>
+          </button>
+
+          <button
+            type="button"
+            class="tool-tab"
+            data-tool-category="delimiters"
+            title="Dynamic brackets and delimiters"
+          >
+            ( )
+            <span>Brackets</span>
+          </button>
+
+          <button type="button" class="tool-tab" data-tool-category="greek" title="Greek letters">
+            αΩ
+            <span>Greek</span>
+          </button>
+
+          <button
+            type="button"
+            class="tool-tab"
+            data-tool-category="symbols"
+            title="Mathematical symbols"
+          >
+            ≠
+            <span>Symbols</span>
+          </button>
+
+          <button type="button" class="tool-tab" data-tool-category="arrows" title="Arrows">
+            →
+            <span>Arrows</span>
+          </button>
+
+          <button type="button" class="tool-tab" data-tool-category="styles" title="Styles">
+            A
+            <span>Styles</span>
+          </button>
+
+          <button type="button" class="tool-tab" data-tool-category="text" title="Text">
+            T
+            <span>Text</span>
+          </button>
+        </nav>
+
+        <!-- TOOL PALETTE -->
+
+        <section class="tool-palette">
+          <!-- STRUCTURES -->
+
+          <div class="tool-panel active" data-tool-panel="structures">
+            <div class="tool-panel-title">Structures</div>
+
+            <div class="tool-buttons">
+              <button type="button" id="fraction-button">Fraction</button>
+
+              <button type="button" id="radical-button">√ Root</button>
+
+              <button type="button" id="binomial-button">Binomial</button>
+
+              <button type="button" id="matrix-button">Matrix</button>
+
+              <button type="button" id="cases-button">Cases</button>
+
+              <button type="button" id="aligned-button">Aligned</button>
+
+              <button type="button" id="gathered-button">Gathered</button>
             </div>
+          </div>
 
-            <div class="control-row">
-                <label for="font-size">Size</label>
+          <!-- OPERATORS -->
 
-                <select id="font-size">
-                    <option value="10">10</option>
-                    <option value="11">11</option>
-                    <option value="12" selected>12</option>
-                    <option value="14">14</option>
-                    <option value="16">16</option>
-                    <option value="18">18</option>
-                    <option value="20">20</option>
-                    <option value="24">24</option>
-                </select>
+          <div class="tool-panel" data-tool-panel="operators">
+            <div class="tool-panel-title">Operators</div>
+
+            <div class="tool-buttons">
+              <button type="button" id="integral-button">∫</button>
+
+              <button type="button" id="contour-integral-button">∮</button>
+
+              <button type="button" id="sum-button">Σ</button>
+
+              <button type="button" id="product-button">Π</button>
+
+              <button type="button" id="bigcup-button">⋃</button>
+
+              <button type="button" id="bigcap-button">⋂</button>
             </div>
+          </div>
 
-            <div class="control-group">
-                <label for="equation-input">Equation</label>
+          <!-- FUNCTIONS -->
 
-                <textarea
-                    id="equation-input"
-                    placeholder="Type an equation..."
-                    spellcheck="false"
-                >x^2 + y^2 = z^2</textarea>
+          <div class="tool-panel" data-tool-panel="functions">
+            <div class="tool-panel-title">Functions</div>
+
+            <div class="tool-buttons">
+              <button type="button" id="sin-button">sin</button>
+
+              <button type="button" id="cos-button">cos</button>
+
+              <button type="button" id="tan-button">tan</button>
+
+              <button type="button" id="cot-button">cot</button>
+
+              <button type="button" id="sec-button">sec</button>
+
+              <button type="button" id="csc-button">csc</button>
+
+              <button type="button" id="log-button">log</button>
+
+              <button type="button" id="ln-button">ln</button>
+
+              <button type="button" id="exp-button">exp</button>
+
+              <button type="button" id="lim-button">lim</button>
+
+              <button type="button" id="max-button">max</button>
+
+              <button type="button" id="min-button">min</button>
+
+              <button type="button" id="det-button">det</button>
+
+              <button type="button" id="gcd-button">gcd</button>
+
+              <button type="button" id="lcm-button">lcm</button>
             </div>
+          </div>
 
-            <div class="formula-buttons">
-    <button type="button" id="fraction-button">
-        Fraction
-    </button>
+          <!-- ACCENTS -->
 
-    <button type="button" id="radical-button">
-        √ Root
-    </button>
+          <div class="tool-panel" data-tool-panel="accents">
+            <div class="tool-panel-title">Accents</div>
 
-    <button type="button" id="integral-button">
-        ∫
-    </button>
+            <div class="tool-buttons">
+              <button type="button" id="hat-button">x̂</button>
 
-    <button type="button" id="sum-button">
-        Σ
-    </button>
+              <button type="button" id="bar-button">x̄</button>
 
-    <button type="button" id="product-button">
-        ∏
-    </button>
-    <button type="button" id="matrix-button">
-    Matrix
-</button>
+              <button type="button" id="vec-button">x⃗</button>
 
-    <button type="button" id="alpha-button">
-        α
-    </button>
+              <button type="button" id="dot-button">ẋ</button>
 
-    <button type="button" id="beta-button">
-        β
-    </button>
+              <button type="button" id="ddot-button">ẍ</button>
 
-    <button type="button" id="theta-button">
-        θ
-    </button>
+              <button type="button" id="overline-button">Overline</button>
 
-    <button type="button" id="pi-button">
-        π
-    </button>
-
-    <button type="button" id="infinity-button">
-        ∞
-    </button>
-
-    <button type="button" id="pm-button">
-        ±
-    </button>
-
-    <button type="button" id="times-button">
-        ×
-    </button>
-
-    <button type="button" id="neq-button">
-        ≠
-    </button>
-</div>
-
-            <div class="preview-section">
-
-                <label>Preview</label>
-
-                <div id="equation-preview" class="equation-preview">
-                    x² + y² = z²
-                </div>
+              <button type="button" id="underline-button">Underline</button>
             </div>
+          </div>
 
-            <button id="insert-equation" class="primary-button">
-                Insert Equation
-            </button>
+          <!-- BRACES / ANNOTATIONS -->
 
-            <p id="status-message" class="status-message"></p>
+          <div class="tool-panel" data-tool-panel="annotations">
+            <div class="tool-panel-title">Braces &amp; Annotations</div>
 
+            <div class="tool-buttons">
+              <button type="button" id="overbrace-button">Overbrace</button>
+
+              <button type="button" id="underbrace-button">Underbrace</button>
+
+              <button type="button" id="overset-button">Overset</button>
+
+              <button type="button" id="underset-button">Underset</button>
+
+              <button type="button" id="boxed-button">Boxed</button>
+            </div>
+          </div>
+
+          <!-- DYNAMIC BRACKETS / DELIMITERS -->
+
+          <div class="tool-panel" data-tool-panel="delimiters">
+            <div class="tool-panel-title">Dynamic Brackets &amp; Delimiters</div>
+
+            <div class="scrollable-symbol-grid">
+              <button type="button" data-symbol="\left(" data-symbol-suffix="\right)">( )</button>
+
+              <button type="button" data-symbol="\left[" data-symbol-suffix="\right]">[ ]</button>
+
+              <button type="button" data-symbol="\left\{" data-symbol-suffix="\right\}">{ }</button>
+
+              <button type="button" data-symbol="\left\langle" data-symbol-suffix="\right\rangle">
+                ⟨ ⟩
+              </button>
+
+              <button type="button" data-symbol="\left\lvert" data-symbol-suffix="\right\rvert">
+                | |
+              </button>
+
+              <button type="button" data-symbol="\left\Vert" data-symbol-suffix="\right\Vert">
+                ‖ ‖
+              </button>
+
+              <button type="button" data-symbol="\left\lceil" data-symbol-suffix="\right\rceil">
+                ⌈ ⌉
+              </button>
+
+              <button type="button" data-symbol="\left\lfloor" data-symbol-suffix="\right\rfloor">
+                ⌊ ⌋
+              </button>
+
+              <button type="button" data-symbol="\left." data-symbol-suffix="\right.">
+                Invisible
+              </button>
+            </div>
+          </div>
+
+          <!-- GREEK -->
+
+          <div class="tool-panel" data-tool-panel="greek">
+            <div class="tool-panel-title">Greek Letters</div>
+
+            <div class="scrollable-symbol-grid greek-grid">
+              <button type="button" data-symbol="\alpha">α</button>
+              <button type="button" data-symbol="\beta">β</button>
+              <button type="button" data-symbol="\gamma">γ</button>
+              <button type="button" data-symbol="\delta">δ</button>
+              <button type="button" data-symbol="\epsilon">ϵ</button>
+              <button type="button" data-symbol="\varepsilon">ε</button>
+
+              <button type="button" data-symbol="\zeta">ζ</button>
+              <button type="button" data-symbol="\eta">η</button>
+              <button type="button" data-symbol="\theta">θ</button>
+              <button type="button" data-symbol="\vartheta">ϑ</button>
+              <button type="button" data-symbol="\iota">ι</button>
+              <button type="button" data-symbol="\kappa">κ</button>
+
+              <button type="button" data-symbol="\varkappa">ϰ</button>
+              <button type="button" data-symbol="\lambda">λ</button>
+              <button type="button" data-symbol="\mu">μ</button>
+              <button type="button" data-symbol="\nu">ν</button>
+              <button type="button" data-symbol="\xi">ξ</button>
+              <button type="button" data-symbol="\omicron">ο</button>
+
+              <button type="button" data-symbol="\pi">π</button>
+              <button type="button" data-symbol="\varpi">ϖ</button>
+              <button type="button" data-symbol="\rho">ρ</button>
+              <button type="button" data-symbol="\varrho">ϱ</button>
+              <button type="button" data-symbol="\sigma">σ</button>
+              <button type="button" data-symbol="\varsigma">ς</button>
+
+              <button type="button" data-symbol="\tau">τ</button>
+              <button type="button" data-symbol="\upsilon">υ</button>
+              <button type="button" data-symbol="\phi">ϕ</button>
+              <button type="button" data-symbol="\varphi">φ</button>
+              <button type="button" data-symbol="\chi">χ</button>
+              <button type="button" data-symbol="\psi">ψ</button>
+
+              <button type="button" data-symbol="\omega">ω</button>
+
+              <button type="button" data-symbol="\Gamma">Γ</button>
+              <button type="button" data-symbol="\Delta">Δ</button>
+              <button type="button" data-symbol="\Theta">Θ</button>
+              <button type="button" data-symbol="\Lambda">Λ</button>
+              <button type="button" data-symbol="\Xi">Ξ</button>
+              <button type="button" data-symbol="\Pi">Π</button>
+
+              <button type="button" data-symbol="\Sigma">Σ</button>
+              <button type="button" data-symbol="\Upsilon">Υ</button>
+              <button type="button" data-symbol="\Phi">Φ</button>
+              <button type="button" data-symbol="\Psi">Ψ</button>
+              <button type="button" data-symbol="\Omega">Ω</button>
+            </div>
+          </div>
+
+          <!-- SYMBOLS -->
+
+          <div class="tool-panel" data-tool-panel="symbols">
+            <div class="tool-panel-title">Mathematical Symbols</div>
+
+            <div class="scrollable-symbol-grid">
+              <!-- Relations -->
+
+              <button type="button" data-symbol="\neq">≠</button>
+              <button type="button" data-symbol="\ne">≠</button>
+              <button type="button" data-symbol="\leq">≤</button>
+              <button type="button" data-symbol="\le">≤</button>
+              <button type="button" data-symbol="\geq">≥</button>
+              <button type="button" data-symbol="\ge">≥</button>
+
+              <button type="button" data-symbol="\approx">≈</button>
+              <button type="button" data-symbol="\equiv">≡</button>
+              <button type="button" data-symbol="\sim">∼</button>
+              <button type="button" data-symbol="\propto">∝</button>
+
+              <button type="button" data-symbol="\ll">≪</button>
+              <button type="button" data-symbol="\gg">≫</button>
+              <button type="button" data-symbol="\prec">≺</button>
+              <button type="button" data-symbol="\succ">≻</button>
+              <button type="button" data-symbol="\preceq">≼</button>
+              <button type="button" data-symbol="\succeq">≽</button>
+
+              <button type="button" data-symbol="\parallel">∥</button>
+              <button type="button" data-symbol="\perp">⊥</button>
+
+              <!-- Arithmetic -->
+
+              <button type="button" data-symbol="\pm">±</button>
+              <button type="button" data-symbol="\mp">∓</button>
+              <button type="button" data-symbol="\times">×</button>
+              <button type="button" data-symbol="\div">÷</button>
+              <button type="button" data-symbol="\cdot">⋅</button>
+              <button type="button" data-symbol="\ast">∗</button>
+
+              <button type="button" data-symbol="\star">⋆</button>
+              <button type="button" data-symbol="\circ">∘</button>
+              <button type="button" data-symbol="\bullet">∙</button>
+              <button type="button" data-symbol="\oplus">⊕</button>
+              <button type="button" data-symbol="\ominus">⊖</button>
+
+              <!-- Sets / Logic -->
+
+              <button type="button" data-symbol="\in">∈</button>
+              <button type="button" data-symbol="\notin">∉</button>
+              <button type="button" data-symbol="\subset">⊂</button>
+              <button type="button" data-symbol="\subseteq">⊆</button>
+
+              <button type="button" data-symbol="\supset">⊃</button>
+              <button type="button" data-symbol="\supseteq">⊇</button>
+
+              <button type="button" data-symbol="\cup">∪</button>
+              <button type="button" data-symbol="\cap">∩</button>
+              <button type="button" data-symbol="\emptyset">∅</button>
+              <button type="button" data-symbol="\setminus">∖</button>
+
+              <button type="button" data-symbol="\forall">∀</button>
+              <button type="button" data-symbol="\exists">∃</button>
+              <button type="button" data-symbol="\neg">¬</button>
+
+              <!-- Common -->
+
+              <button type="button" data-symbol="\infty">∞</button>
+              <button type="button" data-symbol="\partial">∂</button>
+              <button type="button" data-symbol="\nabla">∇</button>
+              <button type="button" data-symbol="\ell">ℓ</button>
+              <button type="button" data-symbol="\Re">ℜ</button>
+              <button type="button" data-symbol="\Im">ℑ</button>
+              <button type="button" data-symbol="\aleph">ℵ</button>
+              <button type="button" data-symbol="\prime">′</button>
+            </div>
+          </div>
+
+          <!-- ARROWS -->
+
+          <div class="tool-panel" data-tool-panel="arrows">
+            <div class="tool-panel-title">Arrows</div>
+
+            <div class="scrollable-symbol-grid">
+              <button type="button" data-symbol="\rightarrow">→</button>
+              <button type="button" data-symbol="\leftarrow">←</button>
+              <button type="button" data-symbol="\leftrightarrow">↔</button>
+
+              <button type="button" data-symbol="\Rightarrow">⇒</button>
+              <button type="button" data-symbol="\Leftarrow">⇐</button>
+              <button type="button" data-symbol="\Leftrightarrow">⇔</button>
+
+              <button type="button" data-symbol="\mapsto">↦</button>
+              <button type="button" data-symbol="\hookrightarrow">↪</button>
+              <button type="button" data-symbol="\hookleftarrow">↩</button>
+
+              <button type="button" data-symbol="\uparrow">↑</button>
+              <button type="button" data-symbol="\downarrow">↓</button>
+              <button type="button" data-symbol="\updownarrow">↕</button>
+
+              <button type="button" data-symbol="\nearrow">↗</button>
+              <button type="button" data-symbol="\searrow">↘</button>
+              <button type="button" data-symbol="\swarrow">↙</button>
+              <button type="button" data-symbol="\nwarrow">↖</button>
+
+              <button type="button" data-symbol="\longrightarrow">⟶</button>
+              <button type="button" data-symbol="\longleftarrow">⟵</button>
+              <button type="button" data-symbol="\longleftrightarrow">⟷</button>
+
+              <button type="button" data-symbol="\Longrightarrow">⟹</button>
+              <button type="button" data-symbol="\Longleftarrow">⟸</button>
+              <button type="button" data-symbol="\Longleftrightarrow">⟺</button>
+
+              <button type="button" data-symbol="\longmapsto">⟼</button>
+
+              <button type="button" data-symbol="\iff">⟺</button>
+              <button type="button" data-symbol="\implies">⟹</button>
+            </div>
+          </div>
+
+          <!-- STYLES -->
+
+          <div class="tool-panel" data-tool-panel="styles">
+            <div class="tool-panel-title">Styles</div>
+
+            <div class="tool-buttons">
+              <button type="button" id="bold-button"><strong>B</strong> Bold</button>
+
+              <button type="button" id="roman-button">Roman</button>
+
+              <button type="button" id="italic-button"><em>I</em> Italic</button>
+            </div>
+          </div>
+
+          <!-- TEXT -->
+
+          <div class="tool-panel" data-tool-panel="text">
+            <div class="tool-panel-title">Text &amp; Boxes</div>
+
+            <div class="tool-buttons">
+              <button type="button" id="text-button">Text</button>
+            </div>
+          </div>
         </section>
+
+        <!-- EQUATION INPUT -->
+
+        <section class="equation-editor">
+          <label for="equation-input" class="section-label"> Equation </label>
+
+          <textarea id="equation-input" spellcheck="false" placeholder="Type an equation...">
+x^2 + y^2 = z^2</textarea>
+        </section>
+
+        <!-- LIVE PREVIEW -->
+
+        <section class="preview-section">
+          <div class="preview-header">
+            <span class="section-label"> Preview </span>
+
+            <span id="preview-status" class="preview-status"> Live </span>
+          </div>
+
+          <div id="equation-preview" class="equation-preview">x² + y² = z²</div>
+        </section>
+
+        <!-- STATUS -->
+
+        <p id="status-message" class="status-message" aria-live="polite"></p>
+
+        <!-- ACTIONS -->
+
+        <div class="editor-actions">
+          <button id="clear-equation" type="button" class="secondary-button">Clear</button>
+
+          <button id="new-equation" type="button" class="secondary-button">New</button>
+
+          <button id="edit-equation" type="button" class="secondary-button">Edit Last</button>
+
+          <button id="edit-selected" type="button" class="secondary-button">Edit Selected</button>
+
+          <button id="replace-equation" type="button" class="secondary-button">Replace</button>
+
+          <button id="insert-equation" type="button" class="primary-button">Insert Equation</button>
+        </div>
+      </section>
     </main>
-</body>
+  </body>
 </html>
