@@ -246,7 +246,9 @@ function readCommand(
     return null;
   }
 
-  const match = expression.slice(startIndex).match(/^\\(?:[A-Za-z]+|[,;:!])/);
+  const remaining = expression.slice(startIndex);
+
+  const match = remaining.match(/^\\(?:[A-Za-z]+|[,;:!])/);
 
   if (!match) {
     return null;
@@ -1644,11 +1646,11 @@ function parseNary(
 
     index = group.nextIndex;
   } else {
-    const bodyAtom = readSingleAtom(expression, index);
+    const bodyExpression = expression.slice(index);
 
-    body = bodyAtom.node;
+    body = parseSequence(bodyExpression);
 
-    index = bodyAtom.nextIndex;
+    index = expression.length;
 
     /*
      * Allow a script directly on the body:
@@ -2578,6 +2580,14 @@ function readScript(
   content: string;
   nextIndex: number;
 } {
+  /*
+   * ---------------------------------------------------------
+   * GROUPED SCRIPT
+   *
+   * x^{n+1}
+   * x_{i+1}
+   * ---------------------------------------------------------
+   */
   if (expression[startIndex] === "{") {
     return readGroup(expression, startIndex);
   }
@@ -2586,6 +2596,254 @@ function readScript(
     throw new Error("Missing script content.");
   }
 
+  /*
+   * ---------------------------------------------------------
+   * COMMAND SCRIPT
+   *
+   * A command is a single mathematical token.
+   *
+   * Examples:
+   *
+   * x^\alpha
+   * x^\frac{a}{b}
+   * x^\sqrt{a}
+   * x^\binom{n}{r}
+   *
+   * ---------------------------------------------------------
+   */
+  if (expression[startIndex] === "\\") {
+    const command = readCommand(expression, startIndex);
+
+    if (!command) {
+      throw new Error(`Invalid script command near position ${startIndex}.`);
+    }
+
+    /*
+     * -----------------------------------------------------
+     * DYNAMIC DELIMITER
+     *
+     * x^\left(\frac{a}{b}\right)
+     * -----------------------------------------------------
+     */
+    if (command.command === "\\left") {
+      const delimiter = parseDelimiter(expression, startIndex);
+
+      return {
+        content: expression.slice(startIndex, delimiter.nextIndex),
+
+        nextIndex: delimiter.nextIndex,
+      };
+    }
+
+    /*
+     * -----------------------------------------------------
+     * MATRIX / ALIGNED / GATHERED
+     *
+     * x^\begin{pmatrix}...\end{pmatrix}
+     * -----------------------------------------------------
+     */
+    if (expression.startsWith("\\begin{aligned}", startIndex)) {
+      const result = parseAlignedEnvironment(expression, startIndex);
+
+      return {
+        content: expression.slice(startIndex, result.nextIndex),
+
+        nextIndex: result.nextIndex,
+      };
+    }
+
+    if (expression.startsWith("\\begin{gathered}", startIndex)) {
+      const result = parseGatheredEnvironment(expression, startIndex);
+
+      return {
+        content: expression.slice(startIndex, result.nextIndex),
+
+        nextIndex: result.nextIndex,
+      };
+    }
+
+    if (
+      expression.startsWith("\\begin{matrix}", startIndex) ||
+      expression.startsWith("\\begin{pmatrix}", startIndex) ||
+      expression.startsWith("\\begin{bmatrix}", startIndex) ||
+      expression.startsWith("\\begin{Bmatrix}", startIndex) ||
+      expression.startsWith("\\begin{vmatrix}", startIndex) ||
+      expression.startsWith("\\begin{Vmatrix}", startIndex) ||
+      expression.startsWith("\\begin{cases}", startIndex)
+    ) {
+      const result = parseMatrixEnvironment(expression, startIndex);
+
+      return {
+        content: expression.slice(startIndex, result.nextIndex),
+
+        nextIndex: result.nextIndex,
+      };
+    }
+
+    let index = command.nextIndex;
+
+    /*
+     * Skip whitespace after
+     * the command name.
+     */
+    while (index < expression.length && /\s/.test(expression[index] ?? "")) {
+      index++;
+    }
+
+    /*
+     * -----------------------------------------------------
+     * SQRT
+     *
+     * \sqrt{x}
+     * \sqrt[3]{x}
+     *
+     * -----------------------------------------------------
+     */
+    if (command.command === "\\sqrt") {
+      if (expression[index] === "[") {
+        const degree = readSquareBracketGroup(expression, index);
+
+        index = degree.nextIndex;
+
+        while (index < expression.length && /\s/.test(expression[index] ?? "")) {
+          index++;
+        }
+      }
+
+      if (expression[index] !== "{") {
+        throw new Error("\\sqrt requires an expression in { }.");
+      }
+
+      const radicand = readGroup(expression, index);
+
+      return {
+        content: expression.slice(startIndex, radicand.nextIndex),
+
+        nextIndex: radicand.nextIndex,
+      };
+    }
+
+    /*
+     * -----------------------------------------------------
+     * TWO-GROUP COMMANDS
+     *
+     * \frac{a}{b}
+     * \binom{n}{r}
+     * \overset{a}{b}
+     * \underset{a}{b}
+     *
+     * -----------------------------------------------------
+     */
+    const twoGroupCommands = new Set(["\\frac", "\\binom", "\\overset", "\\underset"]);
+
+    if (twoGroupCommands.has(command.command)) {
+      if (expression[index] !== "{") {
+        throw new Error(`${command.command} requires its first argument in { }.`);
+      }
+
+      const firstGroup = readGroup(expression, index);
+
+      index = firstGroup.nextIndex;
+
+      while (index < expression.length && /\s/.test(expression[index] ?? "")) {
+        index++;
+      }
+
+      if (expression[index] !== "{") {
+        throw new Error(`${command.command} requires its second argument in { }.`);
+      }
+
+      const secondGroup = readGroup(expression, index);
+
+      return {
+        content: expression.slice(startIndex, secondGroup.nextIndex),
+
+        nextIndex: secondGroup.nextIndex,
+      };
+    }
+
+    /*
+     * -----------------------------------------------------
+     * ONE-GROUP COMMANDS
+     *
+     * \boxed{x}
+     * \text{abc}
+     * \mathbf{x}
+     * \mathrm{x}
+     * \mathit{x}
+     * \hat{x}
+     * \bar{x}
+     * \vec{x}
+     * \dot{x}
+     * \ddot{x}
+     * \overline{x}
+     * \underline{x}
+     * \overbrace{x}
+     * \underbrace{x}
+     *
+     * -----------------------------------------------------
+     */
+    const oneGroupCommands = new Set([
+      "\\boxed",
+      "\\text",
+
+      "\\mathbf",
+      "\\mathrm",
+      "\\mathit",
+
+      "\\hat",
+      "\\bar",
+      "\\vec",
+      "\\dot",
+      "\\ddot",
+      "\\overline",
+      "\\underline",
+
+      "\\overbrace",
+      "\\underbrace",
+    ]);
+
+    if (oneGroupCommands.has(command.command)) {
+      if (expression[index] !== "{") {
+        throw new Error(`${command.command} requires an expression in { }.`);
+      }
+
+      const group = readGroup(expression, index);
+
+      return {
+        content: expression.slice(startIndex, group.nextIndex),
+
+        nextIndex: group.nextIndex,
+      };
+    }
+
+    /*
+     * -----------------------------------------------------
+     * ORDINARY COMMAND
+     *
+     * \alpha
+     * \beta
+     * \infty
+     * \to
+     *
+     * A plain command itself is one script token.
+     * -----------------------------------------------------
+     */
+    return {
+      content: expression.slice(startIndex, command.nextIndex),
+
+      nextIndex: command.nextIndex,
+    };
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * ORDINARY ONE-CHARACTER SCRIPT
+   *
+   * x^2
+   * x_i
+   * ---------------------------------------------------------
+   */
   return {
     content: expression[startIndex],
 

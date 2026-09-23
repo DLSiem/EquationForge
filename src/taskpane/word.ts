@@ -537,6 +537,24 @@ function setupEditor(): void {
     equationInput.focus();
   }
 
+  async function isInlineInsertion(context: Word.RequestContext): Promise<boolean> {
+    const selection = context.document.getSelection();
+
+    const paragraph = selection.paragraphs.getFirst();
+
+    paragraph.load("text");
+
+    await context.sync();
+
+    const text = paragraph.text.trim();
+
+    /*
+     * Non-empty paragraph means the equation is being
+     * inserted into surrounding text.
+     */
+    return text.length > 0;
+  }
+
   function updatePreview(): void {
     const source = equationInput.value.trim();
 
@@ -575,14 +593,16 @@ function setupEditor(): void {
     try {
       const equationTree = parseEquation(equation);
 
-      const renderer = new OmmlRenderer({
-        fontName: fontSelect.value,
-        fontSize: Number(fontSize.value),
-      });
-
-      const ooxml = renderer.renderDocumentOoxml(equationTree);
-
       await Word.run(async (context) => {
+        const inline = await isInlineInsertion(context);
+
+        const renderer = new OmmlRenderer({
+          fontName: fontSelect.value,
+          fontSize: Number(fontSize.value),
+        });
+
+        const ooxml = renderer.renderDocumentOoxml(equationTree, inline);
+
         const selection = context.document.getSelection();
 
         const insertedRange = selection.insertOoxml(ooxml, Word.InsertLocation.replace);

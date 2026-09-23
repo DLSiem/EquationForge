@@ -132,7 +132,7 @@ export class OmmlRenderer {
   private renderFunction(node: FunctionNode): string {
     const font = escapeXml(this.options.fontName);
 
-    const size = Math.round(this.options.fontSize * 2);
+    const size = Math.round(this.getEffectiveFontSize() * 2);
 
     const functionRun = `
         <m:r>
@@ -250,6 +250,10 @@ export class OmmlRenderer {
 `;
   }
 
+  private getEffectiveFontSize(): number {
+    return this.options.fontSize;
+  }
+
   private renderNormalSizeBoundary(content: string): string {
     return `
         <m:box>
@@ -270,6 +274,28 @@ export class OmmlRenderer {
 
         </m:box>
     `;
+  }
+
+  private renderInlineNormalSizeBoundary(content: string): string {
+    return `
+        <m:box>
+
+            <m:boxPr>
+                <m:noBreak m:val="0"/>
+            </m:boxPr>
+
+            <m:e>
+
+                <m:argPr>
+                    <m:argSz m:val="1"/>
+                </m:argPr>
+
+                ${content}
+
+            </m:e>
+
+        </m:box>
+    `.trim();
   }
 
   private shouldNormalizeFunctionArgument(argument: MathNode): boolean {
@@ -474,7 +500,7 @@ export class OmmlRenderer {
   private renderBinomial(node: BinomialNode): string {
     const font = escapeXml(this.options.fontName);
 
-    const size = Math.round(this.options.fontSize * 2);
+    const size = Math.round(this.getEffectiveFontSize() * 2);
 
     return `
         <m:d>
@@ -526,7 +552,7 @@ export class OmmlRenderer {
   private renderTextBlock(node: TextBlockNode): string {
     const font = escapeXml(this.options.fontName);
 
-    const size = Math.round(this.options.fontSize * 2);
+    const size = Math.round(this.getEffectiveFontSize() * 2);
 
     return `
         <m:r>
@@ -575,7 +601,7 @@ export class OmmlRenderer {
   private renderFunctionWithStyle(node: FunctionNode, style: "bold" | "roman" | "italic"): string {
     const font = escapeXml(this.options.fontName);
 
-    const size = Math.round(this.options.fontSize * 2);
+    const size = Math.round(this.getEffectiveFontSize() * 2);
 
     const bold =
       style === "bold"
@@ -731,7 +757,7 @@ export class OmmlRenderer {
   private renderText(node: TextNode, style: "bold" | "roman" | "italic" = "roman"): string {
     const font = escapeXml(this.options.fontName);
 
-    const size = Math.round(this.options.fontSize * 2);
+    const size = Math.round(this.getEffectiveFontSize() * 2);
 
     const bold =
       style === "bold"
@@ -1163,7 +1189,7 @@ export class OmmlRenderer {
   private renderNary(node: NaryNode): string {
     const font = escapeXml(this.options.fontName);
 
-    const size = Math.round(this.options.fontSize * 2);
+    const size = Math.round(this.getEffectiveFontSize() * 2);
 
     const lower = node.lower
       ? `
@@ -1228,7 +1254,7 @@ export class OmmlRenderer {
   private renderDelimiter(node: DelimiterNode): string {
     const font = escapeXml(this.options.fontName);
 
-    const size = Math.round(this.options.fontSize * 2);
+    const size = Math.round(this.getEffectiveFontSize() * 2);
 
     return `
         <m:d>
@@ -1271,7 +1297,7 @@ export class OmmlRenderer {
   ): string {
     const font = escapeXml(this.options.fontName);
 
-    const size = Math.round(this.options.fontSize * 2);
+    const size = Math.round(this.getEffectiveFontSize() * 2);
 
     return `
         <m:d>
@@ -1311,7 +1337,7 @@ export class OmmlRenderer {
   private renderCases(node: CasesNode): string {
     const font = escapeXml(this.options.fontName);
 
-    const size = Math.round(this.options.fontSize * 2);
+    const size = Math.round(this.getEffectiveFontSize() * 2);
 
     const rows = node.rows
       .map((row) => {
@@ -1365,7 +1391,7 @@ export class OmmlRenderer {
   private renderCasesWithStyle(node: CasesNode, style: "bold" | "roman" | "italic"): string {
     const font = escapeXml(this.options.fontName);
 
-    const size = Math.round(this.options.fontSize * 2);
+    const size = Math.round(this.getEffectiveFontSize() * 2);
 
     const rows = node.rows
       .map((row) => {
@@ -1421,7 +1447,7 @@ export class OmmlRenderer {
   private renderMatrix(node: MatrixNode): string {
     const font = escapeXml(this.options.fontName);
 
-    const size = Math.round(this.options.fontSize * 2);
+    const size = Math.round(this.getEffectiveFontSize() * 2);
 
     const rows = node.rows
       .map((row) => {
@@ -1570,7 +1596,7 @@ export class OmmlRenderer {
   private renderMatrixWithStyle(node: MatrixNode, style: "bold" | "roman" | "italic"): string {
     const font = escapeXml(this.options.fontName);
 
-    const size = Math.round(this.options.fontSize * 2);
+    const size = Math.round(this.getEffectiveFontSize() * 2);
 
     const rows = node.rows
       .map((row) => {
@@ -1688,8 +1714,30 @@ export class OmmlRenderer {
     `;
   }
 
-  public renderDocumentOoxml(node: MathNode): string {
-    const mathContent = this.render(node);
+  public renderDocumentOoxml(node: MathNode, inlineNormalSize: boolean = false): string {
+    let mathContent = this.render(node);
+
+    /*
+     * Word uses a reduced mathematical size for
+     * inline equations.
+     *
+     * Put the complete mathematical expression
+     * inside an OMML box and move its argument
+     * one level upward.
+     *
+     * This keeps the entire equation together:
+     *
+     *   integral
+     *   fraction
+     *   function
+     *   matrix
+     *   radical
+     *
+     * rather than enlarging individual text runs.
+     */
+    if (inlineNormalSize) {
+      mathContent = this.renderInlineNormalSizeBoundary(mathContent);
+    }
 
     return `
         <pkg:package
@@ -1764,7 +1812,6 @@ export class OmmlRenderer {
 
                         <m:mathPr>
 
-                            <!-- Disable Word's small-fraction mode -->
                             <m:smallFrac m:val="0"/>
 
                         </m:mathPr>
