@@ -213,6 +213,60 @@ export class OmmlRenderer {
 `;
   }
 
+  private renderNormalSizeBoundary(content: string): string {
+    return `
+        <m:box>
+
+            <m:boxPr>
+                <m:noBreak m:val="0"/>
+            </m:boxPr>
+
+            <m:e>
+
+                <m:argPr>
+                    <m:argSz m:val="1"/>
+                </m:argPr>
+
+                ${content}
+
+            </m:e>
+
+        </m:box>
+    `;
+  }
+
+  private shouldNormalizeFunctionArgument(argument: MathNode): boolean {
+    switch (argument.type) {
+      case "text":
+      case "textBlock":
+      case "script":
+        return false;
+
+      case "sequence":
+        return argument.children.length > 1;
+
+      case "fraction":
+      case "radical":
+      case "delimiter":
+      case "matrix":
+      case "aligned":
+      case "gathered":
+      case "function":
+      case "cases":
+      case "style":
+      case "accent":
+      case "box":
+      case "binomial":
+      case "brace":
+      case "overset":
+      case "nary":
+        return true;
+
+      default:
+        return false;
+    }
+  }
+
   private renderGathered(node: GatheredNode): string {
     const rows = node.rows
       .map(
@@ -606,15 +660,14 @@ export class OmmlRenderer {
     argument: MathNode,
     style: "bold" | "roman" | "italic"
   ): string {
-    if (argument.type === "delimiter") {
-      return `
-            ${this.renderDelimiterWithStyle(argument, style)}
-        `;
-    }
+    let content: string;
 
-    if (argument.type === "sequence" && argument.children.length > 1) {
-      return `
+    if (argument.type === "delimiter") {
+      content = this.renderDelimiterWithStyle(argument, style);
+    } else if (argument.type === "sequence" && argument.children.length > 1) {
+      content = `
             <m:d>
+
                 <m:dPr>
                     <m:begChr m:val="("/>
                     <m:endChr m:val=")"/>
@@ -624,11 +677,18 @@ export class OmmlRenderer {
                 <m:e>
                     ${this.renderWithStyle(argument, style)}
                 </m:e>
+
             </m:d>
         `;
+    } else {
+      content = this.renderWithStyle(argument, style);
     }
 
-    return this.renderWithStyle(argument, style);
+    if (this.shouldNormalizeFunctionArgument(argument)) {
+      return this.renderNormalSizeBoundary(content);
+    }
+
+    return content;
   }
 
   private renderText(node: TextNode, style: "bold" | "roman" | "italic" = "roman"): string {
@@ -784,19 +844,18 @@ export class OmmlRenderer {
   }
 
   private renderFunctionArgument(argument: MathNode): string {
+    let content: string;
+
     /*
      * Explicit parentheses/delimiters are already
      * represented by the AST.
      */
     if (argument.type === "delimiter") {
-      return this.render(argument);
+      content = this.render(argument);
     }
 
     /*
-     * A multi-term sequence should be grouped
-     * visually when used as a function argument.
-     *
-     * Example:
+     * Multi-term sequence:
      *
      * \sin{x+a}
      *
@@ -804,9 +863,10 @@ export class OmmlRenderer {
      *
      * sin(x+a)
      */
-    if (argument.type === "sequence" && argument.children.length > 1) {
-      return `
+    else if (argument.type === "sequence" && argument.children.length > 1) {
+      content = `
             <m:d>
+
                 <m:dPr>
                     <m:begChr m:val="("/>
                     <m:endChr m:val=")"/>
@@ -816,11 +876,25 @@ export class OmmlRenderer {
                 <m:e>
                     ${this.render(argument)}
                 </m:e>
+
             </m:d>
         `;
+    } else {
+      content = this.render(argument);
     }
 
-    return this.render(argument);
+    /*
+     * Word may enter a reduced mathematical size level
+     * when a structured object is used as a function
+     * argument.
+     *
+     * The invisible box provides a real OMML size boundary.
+     */
+    if (this.shouldNormalizeFunctionArgument(argument)) {
+      return this.renderNormalSizeBoundary(content);
+    }
+
+    return content;
   }
 
   private renderSequence(node: SequenceNode): string {
@@ -830,6 +904,7 @@ export class OmmlRenderer {
   private renderFraction(node: FractionNode): string {
     return `
         <m:f>
+
             <m:num>
                 <m:e>
                     ${this.render(node.numerator)}
@@ -841,6 +916,7 @@ export class OmmlRenderer {
                     ${this.render(node.denominator)}
                 </m:e>
             </m:den>
+
         </m:f>
     `;
   }
