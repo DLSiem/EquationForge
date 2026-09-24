@@ -73,7 +73,7 @@ EquationForge/
 Clone the repository and enter the project directory:
 
 ```powershell
-git clone <repository-url>
+git clone https://github.com/DLSiem/EquationForge.git
 cd EquationForge
 ```
 
