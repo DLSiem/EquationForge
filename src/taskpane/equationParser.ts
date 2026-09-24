@@ -209,6 +209,8 @@ const STYLE_COMMANDS: Record<string, "bold" | "roman" | "italic"> = {
   "\\mathit": "italic",
 };
 
+const CALCULUS_COMMANDS = new Set(["\\dd"]);
+
 const ACCENT_COMMANDS: Record<string, AccentNode["accent"]> = {
   "\\hat": "hat",
   "\\bar": "bar",
@@ -687,6 +689,61 @@ function parseAccent(
   };
 }
 
+function parseDifferential(
+  expression: string,
+  startIndex: number
+): {
+  node: MathNode;
+  nextIndex: number;
+} {
+  const command = readCommand(expression, startIndex);
+
+  if (!command || command.command !== "\\dd") {
+    throw new Error(`Invalid differential command near position ${startIndex}.`);
+  }
+
+  let index = command.nextIndex;
+
+  while (index < expression.length && /\s/.test(expression[index] ?? "")) {
+    index++;
+  }
+
+  let argument: MathNode;
+
+  if (expression[index] === "{") {
+    const group = readGroup(expression, index);
+
+    argument = parseSequence(group.content);
+    index = group.nextIndex;
+  } else {
+    if (index >= expression.length || expression[index] === "}") {
+      throw new Error("\\dd requires an argument.");
+    }
+
+    const atom = readSingleAtom(expression, index);
+
+    argument = atom.node;
+    index = atom.nextIndex;
+  }
+
+  return {
+    node: {
+      type: "style",
+      style: "roman",
+      content: {
+        type: "sequence",
+        children: [
+          {
+            type: "text",
+            value: "d",
+          },
+          argument,
+        ],
+      },
+    },
+    nextIndex: index,
+  };
+}
 function parseFunctionArgument(
   expression: string,
   startIndex: number
@@ -1888,6 +1945,13 @@ function readSingleAtom(
     };
   }
 
+  if (
+    expression[index] === "\\" &&
+    CALCULUS_COMMANDS.has(readCommand(expression, index)?.command ?? "")
+  ) {
+    return parseDifferential(expression, index);
+  }
+
   /*
    * -----------------------------------------------------
    * MATHEMATICAL COMMAND
@@ -1898,6 +1962,14 @@ function readSingleAtom(
    * etc.
    * -----------------------------------------------------
    */
+
+  if (
+    expression[index] === "\\" &&
+    CALCULUS_COMMANDS.has(readCommand(expression, index)?.command ?? "")
+  ) {
+    return parseDifferential(expression, index);
+  }
+
   if (expression[index] === "\\") {
     const command = readCommand(expression, index);
 
@@ -2029,6 +2101,15 @@ function parseSequence(expression: string): SequenceNode {
         base = matrix.node;
         index = matrix.nextIndex;
       }
+    } else if (
+      expression[index] === "\\" &&
+      CALCULUS_COMMANDS.has(readCommand(expression, index)?.command ?? "")
+    ) {
+      const differential = parseDifferential(expression, index);
+
+      base = differential.node;
+
+      index = differential.nextIndex;
     } else if (
       expression[index] === "\\" &&
       MATH_SPACES[readCommand(expression, index)?.command ?? ""] !== undefined
@@ -2379,6 +2460,15 @@ function parseSequence(expression: string): SequenceNode {
 
         index = command.nextIndex;
       }
+    } else if (
+      expression[index] === "\\" &&
+      CALCULUS_COMMANDS.has(readCommand(expression, index)?.command ?? "")
+    ) {
+      const differential = parseDifferential(expression, index);
+
+      base = differential.node;
+
+      index = differential.nextIndex;
     }
 
     /*
@@ -2393,6 +2483,7 @@ function parseSequence(expression: string): SequenceNode {
         index < expression.length &&
         expression[index] !== "^" &&
         expression[index] !== "_" &&
+        expression[index] !== "'" &&
         expression[index] !== "{" &&
         expression[index] !== "}" &&
         expression[index] !== "\\"
@@ -2442,8 +2533,19 @@ function parseSequence(expression: string): SequenceNode {
     let subscript: MathNode | null = null;
     let superscript: MathNode | null = null;
 
-    while (index < expression.length && (expression[index] === "^" || expression[index] === "_")) {
+    let primeCount = 0;
+
+    while (
+      index < expression.length &&
+      (expression[index] === "^" || expression[index] === "_" || expression[index] === "'")
+    ) {
       const marker = expression[index];
+
+      if (marker === "'") {
+        primeCount++;
+        index++;
+        continue;
+      }
 
       index++;
 
@@ -2466,6 +2568,39 @@ function parseSequence(expression: string): SequenceNode {
 
         subscript = scriptNode;
       }
+    }
+
+    if (primeCount > 0) {
+      let primeValue: string;
+
+      switch (primeCount) {
+        case 1:
+          primeValue = "′";
+          break;
+
+        case 2:
+          primeValue = "″";
+          break;
+
+        case 3:
+          primeValue = "‴";
+          break;
+
+        default:
+          primeValue = "′".repeat(primeCount);
+          break;
+      }
+
+      base = {
+        type: "sequence",
+        children: [
+          base,
+          {
+            type: "text",
+            value: primeValue,
+          },
+        ],
+      };
     }
 
     if (subscript === null && superscript === null) {

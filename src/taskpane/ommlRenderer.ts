@@ -775,6 +775,8 @@ export class OmmlRenderer {
             `
         : "";
 
+    const displayValue = node.value;
+
     return `
         <m:r>
             <m:rPr>
@@ -795,7 +797,7 @@ export class OmmlRenderer {
                 <w:szCs w:val="${size}"/>
             </w:rPr>
 
-            <m:t xml:space="preserve">${escapeXml(node.value)}</m:t>
+            <m:t xml:space="preserve">${escapeXml(displayValue)}</m:t>
         </m:r>
     `.trim();
   }
@@ -1869,8 +1871,7 @@ function escapeXml(value: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+    .replace(/"/g, "&quot;");
 }
 
 function assertNever(value: never): never {
